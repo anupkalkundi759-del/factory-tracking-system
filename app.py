@@ -58,7 +58,7 @@ except Exception as e:
 # 🔹 SIDEBAR NAVIGATION
 # ==============================
 if st.session_state.role == "admin":
-    page = st.sidebar.radio("Navigation", ["Tracking", "Dashboard"])
+    page = st.sidebar.radio("Navigation", ["Upload", "Tracking", "Dashboard"])
 else:
     page = "Tracking"
 
