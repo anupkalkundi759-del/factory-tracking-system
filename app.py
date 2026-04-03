@@ -37,14 +37,12 @@ if not st.session_state.logged_in:
 # ==============================
 # 🔹 DB CONNECTION
 # ==============================
-import psycopg2
-import streamlit as st
-
 try:
     conn = psycopg2.connect(
-    "postgresql://postgres.veiqtpgsiarxboikevgk:Temc2266%23%2A%24@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
-)
+        "postgresql://postgres.veiqtpgsiarxboikevgk:Temc2266%23%2A%24@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
+    )
     cur = conn.cursor()
+
 except Exception as e:
     st.error(f"DB connection failed: {e}")
     st.stop()
