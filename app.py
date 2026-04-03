@@ -38,16 +38,16 @@ if not st.session_state.logged_in:
 # 🔹 DB CONNECTION
 # ==============================
 import psycopg2
-import os
-
-DATABASE_URL = "postgresql://postgres:Temc2266%23%2A%24@db.veiqtpgsiarxboikevgk.supabase.co:5432/postgres"
+import streamlit as st
 
 try:
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    conn = psycopg2.connect(
+        "postgresql://postgres:Temc2266%23%2A%24@db.veiqtpgsiarxboikevgk.supabase.co:5432/postgres"
+    )
     cur = conn.cursor()
-    print("✅ Connected to Supabase")
 except Exception as e:
-    print("❌ DB connection failed:", e)
+    st.error(f"DB connection failed: {e}")
+    st.stop()
     
 # ==============================
 # 🔹 SIDEBAR NAVIGATION
