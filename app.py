@@ -39,7 +39,11 @@ if not st.session_state.logged_in:
 # ==============================
 try:
     conn = psycopg2.connect(
-    "postgresql://postgres.veiqtpgsiarxboikevgk:Temc2266#*$@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
+        host="aws-1-ap-south-1.pooler.supabase.com",
+        port="6543",
+        database="postgres",
+        user="postgres.veiqtpgsiarxboikevgk",
+        password="Temc2266#*$"
     )
     cur = conn.cursor()
 
