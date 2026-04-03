@@ -3,7 +3,7 @@ import psycopg2
 import pandas as pd
 
 # ==============================
-# LOGIN SYSTEM
+# 🔐 LOGIN SYSTEM
 # ==============================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -16,6 +16,7 @@ def login():
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
+
         users = {
             "worker": {"password": "123", "role": "worker"},
             "admin": {"password": "admin123", "role": "admin"}
@@ -24,6 +25,7 @@ def login():
         if username in users and users[username]["password"] == password:
             st.session_state.logged_in = True
             st.session_state.role = users[username]["role"]
+            st.success("Login successful")
             st.rerun()
         else:
             st.error("Invalid credentials")
@@ -33,7 +35,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ==============================
-# DB CONNECTION
+# 🔹 DB CONNECTION
 # ==============================
 try:
     conn = psycopg2.connect(
@@ -49,10 +51,10 @@ except Exception as e:
     st.stop()
 
 # ==============================
-# NAVIGATION
+# 🔹 SIDEBAR NAVIGATION
 # ==============================
 if st.session_state.role == "admin":
-    page = st.sidebar.radio("Navigation", ["Upload", "Tracking", "Dashboard"])
+    page = st.sidebar.radio("Navigation", ["Tracking", "Dashboard"])
 else:
     page = "Tracking"
 
@@ -64,106 +66,46 @@ if st.sidebar.button("Logout"):
 st.title("Factory Tracking System")
 
 # =========================================================
-# ===================== UPLOAD =============================
-# =========================================================
-if page == "Upload":
-
-    st.subheader("📥 Upload Project Setup Excel")
-
-    uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
-
-    if uploaded_file is not None:
-        df = pd.read_excel(uploaded_file)
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-
-        required_cols = ["project_name","unit_name","house_no","product_code","quantity"]
-
-        if not all(col in df.columns for col in required_cols):
-            st.error("Missing required columns")
-            st.stop()
-
-        for _, row in df.iterrows():
-
-            project = str(row["project_name"]).strip()
-            unit = str(row["unit_name"]).strip()
-            house = str(row["house_no"]).strip()
-            product = str(row["product_code"]).strip()
-            quantity = int(row.get("quantity", 1))
-
-            if not project or not unit or not house or not product:
-                continue
-
-            # PROJECT
-            cur.execute("INSERT INTO projects (project_name) VALUES (%s) ON CONFLICT DO NOTHING",(project,))
-            cur.execute("SELECT project_id FROM projects WHERE project_name=%s",(project,))
-            project_id = cur.fetchone()[0]
-
-            # UNIT
-            cur.execute("INSERT INTO units (project_id, unit_name) VALUES (%s,%s) ON CONFLICT DO NOTHING",(project_id,unit))
-            cur.execute("SELECT unit_id FROM units WHERE project_id=%s AND unit_name=%s",(project_id,unit))
-            unit_id = cur.fetchone()[0]
-
-            # HOUSE
-            cur.execute("INSERT INTO houses (unit_id, house_no) VALUES (%s,%s) ON CONFLICT DO NOTHING",(unit_id,house))
-            cur.execute("SELECT house_id FROM houses WHERE unit_id=%s AND house_no=%s",(unit_id,house))
-            house_id = cur.fetchone()[0]
-
-            # PRODUCT MASTER
-            cur.execute("INSERT INTO products_master (product_code) VALUES (%s) ON CONFLICT DO NOTHING",(product,))
-            cur.execute("SELECT product_id FROM products_master WHERE product_code=%s",(product,))
-            product_id = cur.fetchone()[0]
-
-            # PRODUCTS
-            cur.execute("INSERT INTO products (house_id, product_id, quantity) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
-                        (house_id, product_id, quantity))
-
-        conn.commit()
-        st.success("Upload completed successfully")
-
-# =========================================================
-# ===================== TRACKING ===========================
+# ===================== TRACKING PAGE ======================
 # =========================================================
 if page == "Tracking":
 
+    # ================= PROJECT =================
     cur.execute("SELECT project_id, project_name FROM projects ORDER BY project_name")
     projects = cur.fetchall()
 
-    if not projects:
-        st.warning("⚠️ Upload Excel first")
-        st.stop()
-
     project_dict = {p[1]: p[0] for p in projects}
-    selected_project = st.selectbox("Project", list(project_dict.keys()))
-    project_id = project_dict.get(selected_project)
 
-    if not project_id:
-        st.stop()
+    selected_project = st.selectbox("Select Project", list(project_dict.keys()))
+    project_id = project_dict[selected_project]
 
-    # UNIT
-    cur.execute("SELECT unit_id, unit_name FROM units WHERE project_id=%s",(project_id,))
+    # ================= UNIT =================
+    cur.execute("SELECT unit_id, unit_name FROM units WHERE project_id=%s ORDER BY unit_name", (project_id,))
     units = cur.fetchall()
 
     if not units:
-        st.warning("No units")
+        st.warning("No units for this project")
         st.stop()
 
     unit_dict = {u[1]: u[0] for u in units}
-    selected_unit = st.selectbox("Unit", list(unit_dict.keys()))
-    unit_id = unit_dict.get(selected_unit)
 
-    # HOUSE
-    cur.execute("SELECT house_id, house_no FROM houses WHERE unit_id=%s",(unit_id,))
+    selected_unit = st.selectbox("Select Unit", list(unit_dict.keys()))
+    unit_id = unit_dict[selected_unit]
+
+    # ================= HOUSE =================
+    cur.execute("SELECT house_id, house_no FROM houses WHERE unit_id=%s ORDER BY house_no", (unit_id,))
     houses = cur.fetchall()
 
     if not houses:
-        st.warning("No houses")
+        st.warning("No houses for this unit")
         st.stop()
 
     house_dict = {h[1]: h[0] for h in houses}
-    selected_house = st.selectbox("House", list(house_dict.keys()))
-    house_id = house_dict.get(selected_house)
 
-    # PRODUCT
+    selected_house = st.selectbox("Select House", list(house_dict.keys()))
+    house_id = house_dict[selected_house]
+
+    # ================= PRODUCT =================
     cur.execute("""
         SELECT pm.product_id, pm.product_code
         FROM products p
@@ -173,30 +115,236 @@ if page == "Tracking":
     products = cur.fetchall()
 
     if not products:
-        st.warning("No products")
+        st.warning("No products for this house")
         st.stop()
 
     product_dict = {p[1]: p[0] for p in products}
-    selected_product = st.selectbox("Product", list(product_dict.keys()))
-    product_id = product_dict.get(selected_product)
 
-    # STAGES
-    cur.execute("SELECT stage_id, stage_name FROM stages ORDER BY sequence")
-    stages = cur.fetchall()
+    selected_product = st.selectbox("Select Product", list(product_dict.keys()))
+    product_id = product_dict[selected_product]
 
-    stage_dict = {s[1]: s[0] for s in stages}
-    selected_stage = st.selectbox("Stage", list(stage_dict.keys()))
-    stage_id = stage_dict[selected_stage]
+    # ================= CURRENT STAGE INFO =================
+    cur.execute("""
+        SELECT COALESCE(MAX(s.sequence), 0)
+        FROM tracking_log t
+        JOIN stages s ON t.stage_id = s.stage_id
+        WHERE t.house_id = %s AND t.product_id = %s
+    """, (house_id, product_id))
 
-    status = st.selectbox("Status", ["Pending", "Started", "Completed"])
+    current_seq = cur.fetchone()[0]
 
+    st.info(f"Current Progress Stage: {current_seq}")
+
+    # ================= STAGE =================
+    cur.execute("SELECT stage_id, stage_name, sequence FROM stages ORDER BY sequence")
+    all_stages = cur.fetchall()
+
+    stage_names = [s[1] for s in all_stages]
+    stage_map = {s[1]: (s[0], s[2]) for s in all_stages}
+
+    selected_stage_name = st.selectbox("Select Stage", stage_names)
+    stage_id, selected_sequence = stage_map[selected_stage_name]
+
+    # ================= VALIDATION =================
+    cur.execute("""
+        SELECT s.sequence
+        FROM tracking_log t
+        JOIN stages s ON t.stage_id = s.stage_id
+        WHERE t.house_id = %s 
+        AND t.product_id = %s 
+        AND t.status = 'Completed'
+        ORDER BY s.sequence DESC
+        LIMIT 1
+    """, (house_id, product_id))
+
+    last_completed = cur.fetchone()
+
+    if last_completed:
+        allowed_sequence = last_completed[0] + 1
+    else:
+        allowed_sequence = 1
+
+    if selected_sequence > allowed_sequence:
+        st.error("❌ Complete previous stage first")
+        st.stop()
+
+    # ================= STATUS =================
+    if selected_sequence == 1:
+        status_options = ["Pending", "Started", "Completed"]
+    else:
+        cur.execute("""
+            SELECT status FROM tracking_log t
+            JOIN stages s ON t.stage_id = s.stage_id
+            WHERE t.house_id = %s 
+            AND t.product_id = %s 
+            AND s.sequence = %s
+            ORDER BY t.timestamp DESC LIMIT 1
+        """, (house_id, product_id, selected_sequence - 1))
+
+        prev = cur.fetchone()
+
+        if prev and prev[0] == "Completed":
+            status_options = ["Pending", "Started", "Completed"]
+        else:
+            status_options = ["Pending"]
+
+    status = st.selectbox("Status", status_options)
+
+    # ================= SAVE =================
     if st.button("Submit"):
         cur.execute("""
             INSERT INTO tracking_log (house_id, product_id, stage_id, status, timestamp)
             VALUES (%s, %s, %s, %s, NOW())
         """, (house_id, product_id, stage_id, status))
+
         conn.commit()
-        st.success("Saved successfully")
+        st.success("Saved successfully!")
+
+   # =========================================================
+# 📥 EXCEL UPLOAD (FINAL CLEAN VERSION)
+# =========================================================
+if page == "Tracking" and st.session_state.role == "admin":
+
+    st.subheader("📥 Upload Project Setup Excel")
+
+    uploaded_file = st.file_uploader(
+        "Upload Excel File",
+        type=["xlsx"],
+        key="upload_tracking_unique"
+    )
+
+    if uploaded_file is not None:
+        df = pd.read_excel(uploaded_file)
+
+        # ================= CLEAN COLUMN NAMES =================
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+
+        # ================= REQUIRED COLUMNS =================
+        required_cols = [
+            "project_name",
+            "unit_name",
+            "house_no",
+            "product_code",
+            "quantity"
+        ]
+
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            st.error(f"❌ Missing columns: {missing_cols}")
+            st.stop()
+
+        success_count = 0
+
+        for _, row in df.iterrows():
+
+            # ================= SAFE EXTRACTION =================
+            project_name = str(row.get("project_name", "")).strip()
+            unit_name = str(row.get("unit_name", "")).strip()
+            house_no = str(row.get("house_no", "")).strip()
+            product_code = str(row.get("product_code", "")).strip()
+            product_type = str(row.get("product_category", "")).strip()
+            manufacturing_code = str(row.get("manufacturing_code", "")).strip()
+
+            # quantity safe
+            try:
+                quantity = int(row.get("quantity", 1))
+            except:
+                quantity = 1
+
+            # skip garbage rows
+            if not project_name or not unit_name or not house_no or not product_code:
+                continue
+
+            # ================= PROJECT =================
+            cur.execute("""
+                INSERT INTO projects (project_name)
+                VALUES (%s)
+                ON CONFLICT (project_name) DO NOTHING
+                RETURNING project_id
+            """, (project_name,))
+            result = cur.fetchone()
+
+            if result:
+                project_id = result[0]
+            else:
+                cur.execute("SELECT project_id FROM projects WHERE project_name=%s", (project_name,))
+                project_id = cur.fetchone()[0]
+
+            # ================= UNIT =================
+            cur.execute("""
+                INSERT INTO units (project_id, unit_name)
+                VALUES (%s, %s)
+                ON CONFLICT (project_id, unit_name) DO NOTHING
+                RETURNING unit_id
+            """, (project_id, unit_name))
+            result = cur.fetchone()
+
+            if result:
+                unit_id = result[0]
+            else:
+                cur.execute("""
+                    SELECT unit_id FROM units 
+                    WHERE project_id=%s AND unit_name=%s
+                """, (project_id, unit_name))
+                unit_id = cur.fetchone()[0]
+
+            # ================= HOUSE =================
+            cur.execute("""
+                INSERT INTO houses (unit_id, house_no)
+                VALUES (%s, %s)
+                ON CONFLICT (unit_id, house_no) DO NOTHING
+                RETURNING house_id
+            """, (unit_id, house_no))
+            result = cur.fetchone()
+
+            if result:
+                house_id = result[0]
+            else:
+                cur.execute("""
+                    SELECT house_id FROM houses 
+                    WHERE unit_id=%s AND house_no=%s
+                """, (unit_id, house_no))
+                house_id = cur.fetchone()[0]
+
+            # ================= PRODUCT MASTER =================
+            cur.execute("""
+                INSERT INTO products_master (product_code, type, manufacturing_code)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (product_code) DO NOTHING
+                RETURNING product_id
+            """, (product_code, product_type, manufacturing_code))
+            result = cur.fetchone()
+
+            if result:
+                product_id = result[0]
+            else:
+                cur.execute("""
+                    SELECT product_id FROM products_master 
+                    WHERE product_code=%s
+                """, (product_code,))
+                product_id = cur.fetchone()[0]
+
+                # update manufacturing code if exists
+                if manufacturing_code:
+                    cur.execute("""
+                        UPDATE products_master
+                        SET manufacturing_code=%s
+                        WHERE product_id=%s
+                    """, (manufacturing_code, product_id))
+
+            # ================= PRODUCTS TABLE =================
+            cur.execute("""
+                INSERT INTO products (house_id, product_id, quantity)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (house_id, product_id)
+                DO UPDATE SET quantity = EXCLUDED.quantity
+            """, (house_id, product_id, quantity))
+
+            success_count += 1
+
+        conn.commit()
+
+        st.success(f"✅ Upload complete! {success_count} rows processed successfully.")
 
 # =========================================================
 # ===================== DASHBOARD ==========================
@@ -204,10 +352,15 @@ if page == "Tracking":
 if page == "Dashboard":
 
     import plotly.express as px
+    import plotly.graph_objects as go
 
     st.title("📊 Dashboard")
 
-    # PROJECT OVERVIEW
+    # =========================================================
+    # 🔹 PROJECT OVERVIEW (LATEST STATUS BASED)
+    # =========================================================
+    st.subheader("🏢 Project Overview")
+
     cur.execute("""
     WITH latest_tracking AS (
         SELECT DISTINCT ON (house_id, product_id)
@@ -218,6 +371,7 @@ if page == "Dashboard":
         FROM tracking_log
         ORDER BY house_id, product_id, timestamp DESC
     ),
+
     product_progress AS (
         SELECT 
             p.house_id,
@@ -230,28 +384,111 @@ if page == "Dashboard":
         LEFT JOIN stages s
             ON lt.stage_id = s.stage_id
     )
+
     SELECT 
         pr.project_name,
-        COUNT(DISTINCT p.house_id),
-        COUNT(*),
-        COUNT(CASE WHEN stage_reached = 7 THEN 1 END),
-        COUNT(*) - COUNT(CASE WHEN stage_reached = 7 THEN 1 END),
-        ROUND(AVG(stage_reached * 100.0 / 7), 2)
+        COUNT(DISTINCT p.house_id) AS total_houses,
+        COUNT(*) AS total_products,
+        COUNT(CASE WHEN stage_reached = 7 THEN 1 END) AS completed_products,
+        COUNT(*) - COUNT(CASE WHEN stage_reached = 7 THEN 1 END) AS pending_products,
+        ROUND(AVG(stage_reached * 100.0 / 7), 2) AS avg_progress
     FROM product_progress p
     JOIN houses h ON p.house_id = h.house_id
     JOIN units u ON h.unit_id = u.unit_id
     JOIN projects pr ON u.project_id = pr.project_id
-    GROUP BY pr.project_name;
+    GROUP BY pr.project_name
+    ORDER BY pr.project_name;
     """)
 
-    data = cur.fetchall()
+    df_proj = pd.DataFrame(cur.fetchall(), columns=[
+        "Project", "Total Houses", "Total Products",
+        "Completed", "Pending", "Avg Progress"
+    ])
 
-    if not data:
-        st.warning("Upload Excel first")
-        st.stop()
+    st.dataframe(df_proj, use_container_width=True)
 
-    df = pd.DataFrame(data, columns=["Project","Houses","Products","Completed","Pending","Progress"])
-    st.dataframe(df)
+    st.divider()
 
-    fig = px.bar(df, x="Project", y="Progress")
-    st.plotly_chart(fig)
+  # =========================================================
+# 🔹 PRODUCT TRACKING (LATEST + QUANTITY)
+# =========================================================
+st.subheader("🔍 Product Tracking")
+
+# ================= PROJECT =================
+cur.execute("SELECT project_id, project_name FROM projects ORDER BY project_name")
+projects = cur.fetchall()
+project_dict = {p[1]: p[0] for p in projects}
+
+selected_project = st.selectbox(
+    "Select Project",
+    list(project_dict.keys()),
+    key="dashboard_project"   # ✅ IMPORTANT
+)
+project_id = project_dict[selected_project]
+
+# ================= UNIT =================
+cur.execute("SELECT unit_id, unit_name FROM units WHERE project_id=%s", (project_id,))
+units = cur.fetchall()
+
+if not units:
+    st.warning("No units for this project")
+    st.stop()
+
+unit_dict = {u[1]: u[0] for u in units}
+
+selected_unit = st.selectbox(
+    "Select Unit",
+    list(unit_dict.keys()),
+    key="dashboard_unit"   # ✅ IMPORTANT
+)
+unit_id = unit_dict[selected_unit]
+
+# ================= HOUSE =================
+cur.execute("SELECT house_id, house_no FROM houses WHERE unit_id=%s", (unit_id,))
+houses = cur.fetchall()
+
+if not houses:
+    st.warning("No houses for this unit")
+    st.stop()
+
+house_dict = {h[1]: h[0] for h in houses}
+
+selected_house = st.selectbox(
+    "Select House",
+    list(house_dict.keys()),
+    key="dashboard_house"   # ✅ IMPORTANT
+)
+house_id = house_dict[selected_house]
+
+# ================= DATA QUERY =================
+cur.execute("""
+SELECT 
+    pm.product_code,
+    pm.type,
+    p.quantity,
+    COALESCE(s.stage_name, 'Not Started') AS current_stage,
+    COALESCE(t.status, 'Not Started') AS status,
+    t.timestamp
+FROM products p
+JOIN products_master pm ON p.product_id = pm.product_id
+
+LEFT JOIN LATERAL (
+    SELECT t.stage_id, t.status, t.timestamp
+    FROM tracking_log t
+    WHERE t.house_id = p.house_id
+    AND t.product_id = p.product_id
+    ORDER BY t.timestamp DESC
+    LIMIT 1
+) t ON TRUE
+
+LEFT JOIN stages s ON t.stage_id = s.stage_id
+
+WHERE p.house_id = %s
+ORDER BY pm.product_code;
+""", (house_id,))
+
+df_prod = pd.DataFrame(cur.fetchall(), columns=[
+    "Product", "Type", "Quantity", "Current Stage", "Status", "Last Updated"
+])
+
+st.dataframe(df_prod, use_container_width=True)
