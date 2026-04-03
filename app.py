@@ -42,8 +42,8 @@ import streamlit as st
 
 try:
     conn = psycopg2.connect(
-        "postgresql://postgres:Temc2266%23%2A%24@db.veiqtpgsiarxboikevgk.supabase.co:5432/postgres"
-    )
+    "postgresql://postgres.veiqtpgsiarxboikevgk:Temc2266%23%2A%24@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+)
     cur = conn.cursor()
 except Exception as e:
     st.error(f"DB connection failed: {e}")
