@@ -43,7 +43,7 @@ try:
         port="6543",
         database="postgres",
         user="postgres.veiqtpgsiarxboikevgk",
-        password="Temc2266#*$"
+        password=Temc2266#*$
     )
     cur = conn.cursor()
 
