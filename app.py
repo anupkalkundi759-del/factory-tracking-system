@@ -37,13 +37,16 @@ if not st.session_state.logged_in:
 # ==============================
 # 🔹 DB CONNECTION
 # ==============================
+import psycopg2
+import streamlit as st
+
 try:
     conn = psycopg2.connect(
         host="aws-1-ap-south-1.pooler.supabase.com",
         port="6543",
         database="postgres",
         user="postgres.veiqtpgsiarxboikevgk",
-        password="Temc2266#*$"
+        password="0rJWQiDcmlEn3KLf"
     )
     cur = conn.cursor()
 
