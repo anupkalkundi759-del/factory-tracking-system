@@ -220,15 +220,8 @@ if page == "Tracking" and st.session_state.role == "admin":
 
             df = pd.read_excel(uploaded_file)
 
-            # ================= CLEAN =================
+            # CLEAN
             df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-
-            # 🔥 HANDLE TYPE COLUMN (IMPORTANT)
-            if "product_category" in df.columns:
-                df.rename(columns={"product_category": "type"}, inplace=True)
-
-            if "product_type" in df.columns:
-                df.rename(columns={"product_type": "type"}, inplace=True)
 
             required_cols = [
                 "project_name", "unit_name", "house_no",
@@ -240,7 +233,7 @@ if page == "Tracking" and st.session_state.role == "admin":
                 st.error(f"❌ Missing columns: {missing}")
                 st.stop()
 
-            # ================= CACHE =================
+            # ================= CACHE MAPS =================
             project_map = {}
             unit_map = {}
             house_map = {}
@@ -248,16 +241,14 @@ if page == "Tracking" and st.session_state.role == "admin":
 
             success_count = 0
 
+            # 🔥 FAST LOOP
             for row in df.itertuples(index=False):
 
                 project_name = str(getattr(row, "project_name", "")).strip()
                 unit_name = str(getattr(row, "unit_name", "")).strip()
                 house_no = str(getattr(row, "house_no", "")).strip()
                 product_code = str(getattr(row, "product_code", "")).strip()
-
-                # 🔥 FIXED TYPE
-                product_type = str(getattr(row, "type", "")).strip()
-
+                product_type = str(getattr(row, "product_category", "")).strip()
                 manufacturing_code = str(getattr(row, "manufacturing_code", "")).strip()
 
                 try:
@@ -337,13 +328,9 @@ if page == "Tracking" and st.session_state.role == "admin":
                     cur.execute("""
                         INSERT INTO products_master (product_code, type, manufacturing_code)
                         VALUES (%s, %s, %s)
-                        ON CONFLICT (product_code)
-                        DO UPDATE SET 
-                            type = EXCLUDED.type,
-                            manufacturing_code = EXCLUDED.manufacturing_code
+                        ON CONFLICT (product_code) DO NOTHING
                         RETURNING product_id
                     """, (product_code, product_type, manufacturing_code))
-
                     res = cur.fetchone()
 
                     if res:
