@@ -218,9 +218,10 @@ if page == "Tracking" and st.session_state.role == "admin":
 
         with st.spinner("⚡ Fast upload..."):
 
+            # ================= READ =================
             df = pd.read_excel(uploaded_file)
 
-            # CLEAN
+            # ================= CLEAN =================
             df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
             required_cols = [
@@ -228,23 +229,20 @@ if page == "Tracking" and st.session_state.role == "admin":
                 "product_code", "quantity"
             ]
 
+            if "manufacturing_code" not in df.columns:
+                df["manufacturing_code"] = None
+
             missing = [c for c in required_cols if c not in df.columns]
             if missing:
-                st.error(f"Missing columns: {missing}")
+                st.error(f"❌ Missing columns: {missing}")
                 st.stop()
 
-            # keep only needed
-            keep_cols = required_cols + ["manufacturing_code"] if "manufacturing_code" in df.columns else required_cols
-            df = df[keep_cols]
+            # keep only needed columns
+            df = df[required_cols + ["manufacturing_code"]]
 
             # clean data
             df = df.dropna(subset=required_cols)
             df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(1).astype(int)
-
-            # 🔥 REMOVE DUPLICATES (your logic)
-            df = df.drop_duplicates(subset=[
-                "project_name", "unit_name", "house_no", "product_code"
-            ])
 
             # ================= TEMP TABLE =================
             cur.execute("""
@@ -275,7 +273,7 @@ if page == "Tracking" and st.session_state.role == "admin":
             cur.execute("""
                 INSERT INTO projects (project_name)
                 SELECT DISTINCT project_name FROM temp_upload
-                ON CONFLICT DO NOTHING
+                ON CONFLICT (project_name) DO NOTHING
             """)
 
             # ================= UNIT =================
@@ -284,7 +282,7 @@ if page == "Tracking" and st.session_state.role == "admin":
                 SELECT DISTINCT p.project_id, t.unit_name
                 FROM temp_upload t
                 JOIN projects p ON p.project_name = t.project_name
-                ON CONFLICT DO NOTHING
+                ON CONFLICT (project_id, unit_name) DO NOTHING
             """)
 
             # ================= HOUSE =================
@@ -294,14 +292,16 @@ if page == "Tracking" and st.session_state.role == "admin":
                 FROM temp_upload t
                 JOIN projects p ON p.project_name = t.project_name
                 JOIN units u ON u.project_id = p.project_id AND u.unit_name = t.unit_name
-                ON CONFLICT DO NOTHING
+                ON CONFLICT (unit_id, house_no) DO NOTHING
             """)
 
             # ================= PRODUCT MASTER =================
+            # 🔥 FIXED (NO DUPLICATE CRASH)
             cur.execute("""
                 INSERT INTO products_master (product_code, manufacturing_code)
-                SELECT DISTINCT product_code, manufacturing_code
+                SELECT product_code, MIN(manufacturing_code)
                 FROM temp_upload
+                GROUP BY product_code
                 ON CONFLICT (product_code)
                 DO UPDATE SET manufacturing_code = EXCLUDED.manufacturing_code
             """)
