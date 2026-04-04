@@ -432,5 +432,6 @@ ORDER BY pm.product_code;
 df_prod = pd.DataFrame(cur.fetchall(), columns=[
     "Product", "Type", "Quantity", "Current Stage", "Status", "Last Updated"
 ])
+df_prod["Last Updated"] = df_prod["Last Updated"] + pd.Timedelta(hours=5, minutes=30)
 
 st.dataframe(df_prod, use_container_width=True)
