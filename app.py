@@ -216,7 +216,7 @@ if page == "Tracking" and st.session_state.role == "admin":
 
     if uploaded_file is not None:
 
-        with st.spinner("⚡ Fast processing..."):
+        with st.spinner("⚡ Processing fast..."):
 
             df = pd.read_excel(uploaded_file)
 
@@ -233,16 +233,15 @@ if page == "Tracking" and st.session_state.role == "admin":
                 st.error(f"❌ Missing columns: {missing}")
                 st.stop()
 
-            # 🔥 CACHE (THIS IS THE GAME CHANGER)
+            # ================= CACHE MAPS =================
             project_map = {}
             unit_map = {}
             house_map = {}
             product_map = {}
 
-            product_rows = []
-
             success_count = 0
 
+            # 🔥 FAST LOOP
             for row in df.itertuples(index=False):
 
                 project_name = str(getattr(row, "project_name", "")).strip()
@@ -345,18 +344,15 @@ if page == "Tracking" and st.session_state.role == "admin":
 
                 product_id = product_map[product_code]
 
-                # 🔥 STORE ONLY (NO DB CALL HERE)
-                product_rows.append((house_id, product_id, quantity))
+                # ================= FINAL INSERT =================
+                cur.execute("""
+                    INSERT INTO products (house_id, product_id, quantity)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (house_id, product_id)
+                    DO UPDATE SET quantity = EXCLUDED.quantity
+                """, (house_id, product_id, quantity))
 
                 success_count += 1
-
-            # 🔥 SINGLE BULK INSERT
-            cur.executemany("""
-                INSERT INTO products (house_id, product_id, quantity)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (house_id, product_id)
-                DO UPDATE SET quantity = EXCLUDED.quantity
-            """, product_rows)
 
             conn.commit()
 
