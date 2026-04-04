@@ -71,10 +71,6 @@ if page == "Tracking":
     cur.execute("SELECT project_id, project_name FROM projects ORDER BY project_name")
     projects = cur.fetchall()
 
-    if not projects:
-        st.warning("No data available. Please upload Excel file first.")
-        st.stop()
-
     project_dict = {p[1]: p[0] for p in projects}
 
     selected_project = st.selectbox("Select Project", list(project_dict.keys()))
@@ -133,6 +129,7 @@ if page == "Tracking":
     """, (house_id, product_id))
 
     current_seq = cur.fetchone()[0]
+
     st.info(f"Current Progress Stage: {current_seq}")
 
     # ================= STAGE =================
