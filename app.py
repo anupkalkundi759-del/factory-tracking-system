@@ -71,19 +71,21 @@ if page == "Tracking":
     cur.execute("SELECT project_id, project_name FROM projects ORDER BY project_name")
     projects = cur.fetchall()
 
-    if not projects:
-        st.warning("No data available. Please upload Excel file below.")
-        project_dict = {}
-        selected_project = None
-    else:
+    if projects:
         project_dict = {p[1]: p[0] for p in projects}
         selected_project = st.selectbox("Select Project", list(project_dict.keys()))
+    else:
+        st.warning("No data available. Please upload Excel below.")
+        selected_project = None
 
     # ================= UNIT =================
     if selected_project:
         project_id = project_dict[selected_project]
 
-        cur.execute("SELECT unit_id, unit_name FROM units WHERE project_id=%s ORDER BY unit_name", (project_id,))
+        cur.execute(
+            "SELECT unit_id, unit_name FROM units WHERE project_id=%s ORDER BY unit_name",
+            (project_id,)
+        )
         units = cur.fetchall()
 
         if units:
@@ -99,7 +101,10 @@ if page == "Tracking":
     if selected_unit:
         unit_id = unit_dict[selected_unit]
 
-        cur.execute("SELECT house_id, house_no FROM houses WHERE unit_id=%s ORDER BY house_no", (unit_id,))
+        cur.execute(
+            "SELECT house_id, house_no FROM houses WHERE unit_id=%s ORDER BY house_no",
+            (unit_id,)
+        )
         houses = cur.fetchall()
 
         if houses:
@@ -147,7 +152,7 @@ if page == "Tracking":
         current_seq = cur.fetchone()[0]
         st.info(f"Current Progress Stage: {current_seq}")
 
-        # Stage selection
+        # Stage dropdown
         cur.execute("SELECT stage_id, stage_name, sequence FROM stages ORDER BY sequence")
         all_stages = cur.fetchall()
 
@@ -201,7 +206,6 @@ if page == "Tracking":
 
             status = st.selectbox("Status", status_options)
 
-            # Save
             if st.button("Submit"):
                 cur.execute("""
                     INSERT INTO tracking_log (house_id, product_id, stage_id, status, timestamp)
@@ -218,165 +222,71 @@ if page == "Tracking":
     uploaded_file = st.file_uploader("Upload Excel", type=["xlsx"])
 
     if uploaded_file:
-        st.success("File uploaded successfully")
-        # your processing logic here
+        import pandas as pd
 
-   # =========================================================
-# 📥 EXCEL UPLOAD (FINAL CLEAN VERSION)
-# =========================================================
-if page == "Tracking" and st.session_state.role == "admin":
+        df = pd.read_excel(uploaded_file)
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    st.subheader("📥 Upload Project Setup Excel")
+        for _, row in df.iterrows():
+            project = str(row["project_name"]).strip()
+            unit = str(row["unit_name"]).strip()
+            house = str(row["house_no"]).strip()
+            product = str(row["product_code"]).strip()
 
-    uploaded_file = st.file_uploader(
-        "Upload Excel File",
-        type=["xlsx"],
-        key="upload_tracking_unique"
-    )
+            # PROJECT
+            cur.execute("""
+                INSERT INTO projects (project_name)
+                VALUES (%s)
+                ON CONFLICT (project_name) DO NOTHING
+            """, (project,))
+            cur.execute("SELECT project_id FROM projects WHERE project_name=%s", (project,))
+            project_id = cur.fetchone()[0]
 
-    if uploaded_file is not None:
+            # UNIT
+            cur.execute("""
+                INSERT INTO units (project_id, unit_name)
+                VALUES (%s, %s)
+                ON CONFLICT (project_id, unit_name) DO NOTHING
+            """, (project_id, unit))
+            cur.execute("""
+                SELECT unit_id FROM units
+                WHERE project_id=%s AND unit_name=%s
+            """, (project_id, unit))
+            unit_id = cur.fetchone()[0]
 
-        with st.spinner("⚡ Processing fast..."):
+            # HOUSE
+            cur.execute("""
+                INSERT INTO houses (unit_id, house_no)
+                VALUES (%s, %s)
+                ON CONFLICT (unit_id, house_no) DO NOTHING
+            """, (unit_id, house))
+            cur.execute("""
+                SELECT house_id FROM houses
+                WHERE unit_id=%s AND house_no=%s
+            """, (unit_id, house))
+            house_id = cur.fetchone()[0]
 
-            df = pd.read_excel(uploaded_file)
+            # PRODUCT MASTER
+            cur.execute("""
+                INSERT INTO products_master (product_code)
+                VALUES (%s)
+                ON CONFLICT (product_code) DO NOTHING
+            """, (product,))
+            cur.execute("""
+                SELECT product_id FROM products_master
+                WHERE product_code=%s
+            """, (product,))
+            product_id = cur.fetchone()[0]
 
-            # CLEAN
-            df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+            # PRODUCT
+            cur.execute("""
+                INSERT INTO products (house_id, product_id)
+                VALUES (%s, %s)
+                ON CONFLICT (house_id, product_id) DO NOTHING
+            """, (house_id, product_id))
 
-            required_cols = [
-                "project_name", "unit_name", "house_no",
-                "product_code", "quantity"
-            ]
-
-            missing = [c for c in required_cols if c not in df.columns]
-            if missing:
-                st.error(f"❌ Missing columns: {missing}")
-                st.stop()
-
-            # ================= CACHE MAPS =================
-            project_map = {}
-            unit_map = {}
-            house_map = {}
-            product_map = {}
-
-            success_count = 0
-
-            # 🔥 FAST LOOP
-            for row in df.itertuples(index=False):
-
-                project_name = str(getattr(row, "project_name", "")).strip()
-                unit_name = str(getattr(row, "unit_name", "")).strip()
-                house_no = str(getattr(row, "house_no", "")).strip()
-                product_code = str(getattr(row, "product_code", "")).strip()
-                product_type = str(getattr(row, "product_category", "")).strip()
-                manufacturing_code = str(getattr(row, "manufacturing_code", "")).strip()
-
-                try:
-                    quantity = int(getattr(row, "quantity", 1))
-                except:
-                    quantity = 1
-
-                if not project_name or not unit_name or not house_no or not product_code:
-                    continue
-
-                # ================= PROJECT =================
-                if project_name not in project_map:
-                    cur.execute("""
-                        INSERT INTO projects (project_name)
-                        VALUES (%s)
-                        ON CONFLICT (project_name) DO NOTHING
-                        RETURNING project_id
-                    """, (project_name,))
-                    res = cur.fetchone()
-
-                    if res:
-                        project_map[project_name] = res[0]
-                    else:
-                        cur.execute("SELECT project_id FROM projects WHERE project_name=%s", (project_name,))
-                        project_map[project_name] = cur.fetchone()[0]
-
-                project_id = project_map[project_name]
-
-                # ================= UNIT =================
-                unit_key = (project_id, unit_name)
-
-                if unit_key not in unit_map:
-                    cur.execute("""
-                        INSERT INTO units (project_id, unit_name)
-                        VALUES (%s, %s)
-                        ON CONFLICT (project_id, unit_name) DO NOTHING
-                        RETURNING unit_id
-                    """, (project_id, unit_name))
-                    res = cur.fetchone()
-
-                    if res:
-                        unit_map[unit_key] = res[0]
-                    else:
-                        cur.execute("""
-                            SELECT unit_id FROM units
-                            WHERE project_id=%s AND unit_name=%s
-                        """, (project_id, unit_name))
-                        unit_map[unit_key] = cur.fetchone()[0]
-
-                unit_id = unit_map[unit_key]
-
-                # ================= HOUSE =================
-                house_key = (unit_id, house_no)
-
-                if house_key not in house_map:
-                    cur.execute("""
-                        INSERT INTO houses (unit_id, house_no)
-                        VALUES (%s, %s)
-                        ON CONFLICT (unit_id, house_no) DO NOTHING
-                        RETURNING house_id
-                    """, (unit_id, house_no))
-                    res = cur.fetchone()
-
-                    if res:
-                        house_map[house_key] = res[0]
-                    else:
-                        cur.execute("""
-                            SELECT house_id FROM houses
-                            WHERE unit_id=%s AND house_no=%s
-                        """, (unit_id, house_no))
-                        house_map[house_key] = cur.fetchone()[0]
-
-                house_id = house_map[house_key]
-
-                # ================= PRODUCT MASTER =================
-                if product_code not in product_map:
-                    cur.execute("""
-                        INSERT INTO products_master (product_code, type, manufacturing_code)
-                        VALUES (%s, %s, %s)
-                        ON CONFLICT (product_code) DO NOTHING
-                        RETURNING product_id
-                    """, (product_code, product_type, manufacturing_code))
-                    res = cur.fetchone()
-
-                    if res:
-                        product_map[product_code] = res[0]
-                    else:
-                        cur.execute("""
-                            SELECT product_id FROM products_master
-                            WHERE product_code=%s
-                        """, (product_code,))
-                        product_map[product_code] = cur.fetchone()[0]
-
-                product_id = product_map[product_code]
-
-                # ================= FINAL INSERT =================
-                cur.execute("""
-                    INSERT INTO products (house_id, product_id, quantity)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (house_id, product_id)
-                    DO UPDATE SET quantity = EXCLUDED.quantity
-                """, (house_id, product_id, quantity))
-
-                success_count += 1
-
-            conn.commit()
-
-        st.success(f"🚀 Upload complete! {success_count} rows processed.")
+        conn.commit()
+        st.success("Upload complete!")
 
 # =========================================================
 # ===================== DASHBOARD ==========================
