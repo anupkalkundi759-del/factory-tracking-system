@@ -69,12 +69,16 @@ if page == "Tracking":
 
     # ================= PROJECT =================
     cur.execute("SELECT project_id, project_name FROM projects ORDER BY project_name")
-    projects = cur.fetchall()
+projects = cur.fetchall()
 
-    project_dict = {p[1]: p[0] for p in projects}
+if not projects:
+    st.warning("No data available. Please upload Excel file first.")
+    st.stop()
 
-    selected_project = st.selectbox("Select Project", list(project_dict.keys()))
-    project_id = project_dict[selected_project]
+project_dict = {p[1]: p[0] for p in projects}
+
+selected_project = st.selectbox("Select Project", list(project_dict.keys()))
+project_id = project_dict[selected_project]
 
     # ================= UNIT =================
     cur.execute("SELECT unit_id, unit_name FROM units WHERE project_id=%s ORDER BY unit_name", (project_id,))
