@@ -20,7 +20,7 @@ def login():
 
         users = {
             "worker": {"password": "123", "role": "worker"},
-            "admin": {"password": "admin123", "role": "admin"}
+            "admin": {"password": "admin@123", "role": "admin"}
         }
 
         if username in users and users[username]["password"] == password:
