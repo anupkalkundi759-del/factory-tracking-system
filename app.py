@@ -216,11 +216,11 @@ if page == "Tracking":
                 st.success("Saved successfully!")
 
     # ================= UPLOAD SECTION =================
-st.subheader("Upload Project Setup Excel")
+    st.subheader("Upload Project Setup Excel")
 
-uploaded_file = st.file_uploader("Upload Excel", type=["xlsx"])
+    uploaded_file = st.file_uploader("Upload Excel", type=["xlsx"])
 
-if uploaded_file:
+    if uploaded_file:
 
     start_time = time.time()
 
