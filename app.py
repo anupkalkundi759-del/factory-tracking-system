@@ -216,24 +216,22 @@ if page == "Tracking":
                 st.success("Saved successfully!")
 
     # ================= UPLOAD SECTION =================
-    import time
-    import pandas as pd
+st.subheader("Upload Project Setup Excel")
 
-    st.subheader("Upload Project Setup Excel")
+uploaded_file = st.file_uploader("Upload Excel", type=["xlsx"])
 
-    uploaded_file = st.file_uploader("Upload Excel", type=["xlsx"])
-
-    if uploaded_file:
+if uploaded_file:
 
     start_time = time.time()
 
     status = st.empty()
     status.info("⏳ Uploading and processing... please wait")
 
+    # ================= READ FILE =================
     df = pd.read_excel(uploaded_file)
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # 🔥 CLEAN DATA
+    # ================= CLEAN DATA =================
     df["project_name"] = df["project_name"].astype(str).str.strip()
     df["unit_name"] = df["unit_name"].astype(str).str.strip()
     df["house_no"] = df["house_no"].astype(str).str.strip()
@@ -256,9 +254,7 @@ if page == "Tracking":
     before_products = cur.fetchone()[0]
 
     # ================= PROJECTS =================
-    projects = df["project_name"].dropna().unique()
-
-    for p in projects:
+    for p in df["project_name"].dropna().unique():
         cur.execute("""
             INSERT INTO projects (project_name)
             VALUES (%s)
@@ -286,7 +282,6 @@ if page == "Tracking":
         uid = unit_map.get((row["unit_name"], project_map[row["project_name"]]))
 
         if uid is None:
-            st.error(f"❌ Unit not found: {row['unit_name']}")
             continue
 
         cur.execute("""
@@ -300,9 +295,7 @@ if page == "Tracking":
     house_map = {(str(h[1]).strip(), h[2]): h[0] for h in cur.fetchall()}
 
     # ================= PRODUCTS MASTER =================
-    products = df["product_code"].dropna().unique()
-
-    for p in products:
+    for p in df["product_code"].dropna().unique():
         cur.execute("""
             INSERT INTO products_master (product_code)
             VALUES (%s)
@@ -324,17 +317,15 @@ if page == "Tracking":
             error_count += 1
             continue
 
-        key = (row["house_no"], uid)
+        hid = house_map.get((row["house_no"], uid))
 
-        if key not in house_map:
-            st.warning(f"⚠️ Missing house: {key}")
+        if hid is None:
             error_count += 1
             continue
 
-        hid = house_map[key]
+        pid = product_map.get(row["product_code"])
 
-        if row["product_code"] not in product_map:
-            st.warning(f"⚠️ Missing product: {row['product_code']}")
+        if pid is None:
             error_count += 1
             continue
 
@@ -342,7 +333,7 @@ if page == "Tracking":
             INSERT INTO products (house_id, product_id)
             VALUES (%s, %s)
             ON CONFLICT (house_id, product_id) DO NOTHING
-        """, (hid, product_map[row["product_code"]]))
+        """, (hid, pid))
 
     conn.commit()
 
