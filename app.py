@@ -52,9 +52,15 @@ cur = conn.cursor()
 # 🔹 SIDEBAR NAVIGATION
 # ==============================
 if st.session_state.role == "admin":
-    page = st.sidebar.radio("Navigation", ["Tracking", "Dashboard"])
+    page = st.sidebar.radio(
+        "Navigation",
+        ["Tracking", "Dashboard", "Product Tracking", "Upload Excel"]
+    )
 else:
-    page = "Tracking"
+    page = st.sidebar.radio(
+        "Navigation",
+        ["Tracking", "Product Tracking"]
+    )
 
 if st.sidebar.button("Logout"):
     st.session_state.logged_in = False
