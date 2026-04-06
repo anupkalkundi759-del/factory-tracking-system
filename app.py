@@ -351,87 +351,90 @@ if page == "Dashboard":
 
     st.divider()
 
-  # =========================================================
-# 🔹 PRODUCT TRACKING (LATEST + QUANTITY)
 # =========================================================
-st.subheader("🔍 Product Tracking")
+# ================= PRODUCT TRACKING PAGE ==================
+# =========================================================
+if page == "Product Tracking":
 
-# ================= PROJECT =================
-cur.execute("SELECT project_id, project_name FROM projects ORDER BY project_name")
-projects = cur.fetchall()
-project_dict = {p[1]: p[0] for p in projects}
+    st.subheader("🔍 Product Tracking")
 
-selected_project = st.selectbox(
-    "Select Project",
-    list(project_dict.keys()),
-    key="dashboard_project"   # ✅ IMPORTANT
-)
-project_id = project_dict[selected_project]
+    # ================= PROJECT =================
+    cur.execute("SELECT project_id, project_name FROM projects ORDER BY project_name")
+    projects = cur.fetchall()
+    project_dict = {p[1]: p[0] for p in projects}
 
-# ================= UNIT =================
-cur.execute("SELECT unit_id, unit_name FROM units WHERE project_id=%s", (project_id,))
-units = cur.fetchall()
+    selected_project = st.selectbox(
+        "Select Project",
+        list(project_dict.keys()),
+        key="product_project"   # 🔥 changed key (important)
+    )
+    project_id = project_dict[selected_project]
 
-if not units:
-    st.warning("No units for this project")
-    st.stop()
+    # ================= UNIT =================
+    cur.execute("SELECT unit_id, unit_name FROM units WHERE project_id=%s", (project_id,))
+    units = cur.fetchall()
 
-unit_dict = {u[1]: u[0] for u in units}
+    if not units:
+        st.warning("No units for this project")
+        st.stop()
 
-selected_unit = st.selectbox(
-    "Select Unit",
-    list(unit_dict.keys()),
-    key="dashboard_unit"   # ✅ IMPORTANT
-)
-unit_id = unit_dict[selected_unit]
+    unit_dict = {u[1]: u[0] for u in units}
 
-# ================= HOUSE =================
-cur.execute("SELECT house_id, house_no FROM houses WHERE unit_id=%s", (unit_id,))
-houses = cur.fetchall()
+    selected_unit = st.selectbox(
+        "Select Unit",
+        list(unit_dict.keys()),
+        key="product_unit"   # 🔥 changed key
+    )
+    unit_id = unit_dict[selected_unit]
 
-if not houses:
-    st.warning("No houses for this unit")
-    st.stop()
+    # ================= HOUSE =================
+    cur.execute("SELECT house_id, house_no FROM houses WHERE unit_id=%s", (unit_id,))
+    houses = cur.fetchall()
 
-house_dict = {h[1]: h[0] for h in houses}
+    if not houses:
+        st.warning("No houses for this unit")
+        st.stop()
 
-selected_house = st.selectbox(
-    "Select House",
-    list(house_dict.keys()),
-    key="dashboard_house"   # ✅ IMPORTANT
-)
-house_id = house_dict[selected_house]
+    house_dict = {h[1]: h[0] for h in houses}
 
-# ================= DATA QUERY =================
-cur.execute("""
-SELECT 
-    pm.product_code,
-    pm.type,
-    p.quantity,
-    COALESCE(s.stage_name, 'Not Started') AS current_stage,
-    COALESCE(t.status, 'Not Started') AS status,
-    t.timestamp
-FROM products p
-JOIN products_master pm ON p.product_id = pm.product_id
+    selected_house = st.selectbox(
+        "Select House",
+        list(house_dict.keys()),
+        key="product_house"   # 🔥 changed key
+    )
+    house_id = house_dict[selected_house]
 
-LEFT JOIN LATERAL (
-    SELECT t.stage_id, t.status, t.timestamp
-    FROM tracking_log t
-    WHERE t.house_id = p.house_id
-    AND t.product_id = p.product_id
-    ORDER BY t.timestamp DESC
-    LIMIT 1
-) t ON TRUE
+    # ================= DATA QUERY =================
+    cur.execute("""
+    SELECT 
+        pm.product_code,
+        pm.type,
+        p.quantity,
+        COALESCE(s.stage_name, 'Not Started') AS current_stage,
+        COALESCE(t.status, 'Not Started') AS status,
+        t.timestamp
+    FROM products p
+    JOIN products_master pm ON p.product_id = pm.product_id
 
-LEFT JOIN stages s ON t.stage_id = s.stage_id
+    LEFT JOIN LATERAL (
+        SELECT t.stage_id, t.status, t.timestamp
+        FROM tracking_log t
+        WHERE t.house_id = p.house_id
+        AND t.product_id = p.product_id
+        ORDER BY t.timestamp DESC
+        LIMIT 1
+    ) t ON TRUE
 
-WHERE p.house_id = %s
-ORDER BY pm.product_code;
-""", (house_id,))
+    LEFT JOIN stages s ON t.stage_id = s.stage_id
 
-df_prod = pd.DataFrame(cur.fetchall(), columns=[
-    "Product", "Type", "Quantity", "Current Stage", "Status", "Last Updated"
-])
-df_prod["Last Updated"] = df_prod["Last Updated"] + pd.Timedelta(hours=5, minutes=30)
+    WHERE p.house_id = %s
+    ORDER BY pm.product_code;
+    """, (house_id,))
 
-st.dataframe(df_prod, use_container_width=True)
+    df_prod = pd.DataFrame(cur.fetchall(), columns=[
+        "Product", "Type", "Quantity", "Current Stage", "Status", "Last Updated"
+    ])
+
+    df_prod["Last Updated"] = df_prod["Last Updated"] + pd.Timedelta(hours=5, minutes=30)
+
+    st.dataframe(df_prod, use_container_width=True)
