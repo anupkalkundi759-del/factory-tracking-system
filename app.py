@@ -61,6 +61,7 @@ else:
         "Navigation",
         ["Tracking", "Product Tracking"]
     )
+st.title("Factory Tracking System")
 
 # =========================================================
 # ===================== TRACKING PAGE ======================
