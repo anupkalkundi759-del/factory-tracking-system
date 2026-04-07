@@ -264,65 +264,90 @@ if page == "Dashboard":
 # =========================================================
 if page == "Product Tracking":
 
-    st.subheader("🔍 Product Tracking")
+    st.title("🔍 Product Tracking")
+
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
 
     # ================= PROJECT =================
     cur.execute("SELECT project_id, project_name FROM projects ORDER BY project_name")
     projects = cur.fetchall()
     project_dict = {p[1]: p[0] for p in projects}
 
-    selected_project = st.selectbox(
-        "Select Project",
-        list(project_dict.keys()),
-        key="product_project"   # 🔥 changed key (important)
-    )
-    project_id = project_dict[selected_project]
+    project_options = ["All"] + list(project_dict.keys())
+    selected_project = col1.selectbox("Project", project_options, key="proj")
 
-    # ================= UNIT =================
-    cur.execute("SELECT unit_id, unit_name FROM units WHERE project_id=%s", (project_id,))
+    # ================= UNIT (DEPENDENT) =================
+    if selected_project == "All":
+        cur.execute("SELECT unit_id, unit_name FROM units ORDER BY unit_name")
+    else:
+        cur.execute("""
+            SELECT unit_id, unit_name
+            FROM units
+            WHERE project_id = %s
+            ORDER BY unit_name
+        """, (project_dict[selected_project],))
+
     units = cur.fetchall()
-
-    if not units:
-        st.warning("No units for this project")
-        st.stop()
-
     unit_dict = {u[1]: u[0] for u in units}
 
-    selected_unit = st.selectbox(
-        "Select Unit",
-        list(unit_dict.keys()),
-        key="product_unit"   # 🔥 changed key
-    )
-    unit_id = unit_dict[selected_unit]
+    unit_options = ["All"] + list(unit_dict.keys())
+    selected_unit = col2.selectbox("Unit", unit_options, key="unit")
 
-    # ================= HOUSE =================
-    cur.execute("SELECT house_id, house_no FROM houses WHERE unit_id=%s", (unit_id,))
+    # ================= HOUSE (DEPENDENT) =================
+    if selected_unit == "All":
+        if selected_project == "All":
+            cur.execute("SELECT house_id, house_no FROM houses ORDER BY house_no")
+        else:
+            cur.execute("""
+                SELECT h.house_id, h.house_no
+                FROM houses h
+                JOIN units u ON h.unit_id = u.unit_id
+                WHERE u.project_id = %s
+            """, (project_dict[selected_project],))
+    else:
+        cur.execute("""
+            SELECT house_id, house_no
+            FROM houses
+            WHERE unit_id = %s
+        """, (unit_dict[selected_unit],))
+
     houses = cur.fetchall()
-
-    if not houses:
-        st.warning("No houses for this unit")
-        st.stop()
-
     house_dict = {h[1]: h[0] for h in houses}
 
-    selected_house = st.selectbox(
-        "Select House",
-        list(house_dict.keys()),
-        key="product_house"   # 🔥 changed key
-    )
-    house_id = house_dict[selected_house]
+    house_options = ["All"] + list(house_dict.keys())
+    selected_house = col3.selectbox("House", house_options, key="house")
 
-    # ================= DATA QUERY =================
-    cur.execute("""
+    # ================= STATUS =================
+    status_options = ["All", "Not Started", "Started", "Completed"]
+    selected_status = col4.selectbox("Status", status_options)
+
+    # ================= STAGE =================
+    cur.execute("SELECT stage_name FROM stages ORDER BY sequence")
+    stages = cur.fetchall()
+    stage_options = ["All"] + [s[0] for s in stages]
+
+    selected_stage = col5.selectbox("Stage", stage_options)
+
+    # ================= SEARCH =================
+    search = col6.text_input("Search")
+
+    # ================= QUERY =================
+    query = """
     SELECT 
         pm.product_code,
         pm.type,
         p.quantity,
-        COALESCE(s.stage_name, 'Not Started') AS current_stage,
+        pr.project_name,
+        u.unit_name,
+        h.house_no,
+        COALESCE(s.stage_name, 'Not Started') AS stage,
         COALESCE(t.status, 'Not Started') AS status,
-        t.timestamp
+        COALESCE(s.sequence, 0) AS stage_seq
     FROM products p
     JOIN products_master pm ON p.product_id = pm.product_id
+    JOIN houses h ON p.house_id = h.house_id
+    JOIN units u ON h.unit_id = u.unit_id
+    JOIN projects pr ON u.project_id = pr.project_id
 
     LEFT JOIN LATERAL (
         SELECT t.stage_id, t.status, t.timestamp
@@ -334,18 +359,65 @@ if page == "Product Tracking":
     ) t ON TRUE
 
     LEFT JOIN stages s ON t.stage_id = s.stage_id
+    WHERE 1=1
+    """
 
-    WHERE p.house_id = %s
-    ORDER BY pm.product_code;
-    """, (house_id,))
+    params = []
 
-    df_prod = pd.DataFrame(cur.fetchall(), columns=[
-        "Product", "Type", "Quantity", "Current Stage", "Status", "Last Updated"
+    if selected_project != "All":
+        query += " AND pr.project_name = %s"
+        params.append(selected_project)
+
+    if selected_unit != "All":
+        query += " AND u.unit_name = %s"
+        params.append(selected_unit)
+
+    if selected_house != "All":
+        query += " AND h.house_no = %s"
+        params.append(selected_house)
+
+    if selected_status != "All":
+        query += " AND COALESCE(t.status, 'Not Started') = %s"
+        params.append(selected_status)
+
+    if selected_stage != "All":
+        query += " AND COALESCE(s.stage_name, 'Not Started') = %s"
+        params.append(selected_stage)
+
+    if search:
+        query += " AND pm.product_code ILIKE %s"
+        params.append(f"%{search}%")
+
+    query += " ORDER BY pm.product_code"
+
+    cur.execute(query, tuple(params))
+    data = cur.fetchall()
+
+    df = pd.DataFrame(data, columns=[
+        "Product", "Type", "Qty", "Project", "Unit", "House",
+        "Stage", "Status", "Stage Seq"
     ])
 
-    df_prod["Last Updated"] = df_prod["Last Updated"] + pd.Timedelta(hours=5, minutes=30)
+    # ================= PROGRESS =================
+    total_stages = 7
+    df["Progress %"] = (df["Stage Seq"] / total_stages) * 100
+    df["Progress"] = df["Progress %"].astype(int).astype(str) + "%"
 
-    st.dataframe(df_prod, use_container_width=True)
+    df_display = df.drop(columns=["Stage Seq", "Progress %"])
+
+    # ================= STATUS COLOR =================
+    def color_status(val):
+        if val == "Completed":
+            return "background-color: #28a745; color: white"
+        elif val == "Started":
+            return "background-color: #ffc107"
+        else:
+            return "background-color: #dc3545; color: white"
+
+    st.dataframe(
+        df_display.style.applymap(color_status, subset=["Status"]),
+        use_container_width=True
+    )
 
 # =========================================================
 # ================= UPLOAD PAGE ============================
