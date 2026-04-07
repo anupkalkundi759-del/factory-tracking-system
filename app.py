@@ -56,7 +56,7 @@ if st.session_state.role == "admin":
         page = st.sidebar.radio(
     "Navigation",
     ["Tracking", "Dashboard", "Product Tracking", "Upload Excel", "Delete Data"]
-    )
+    ))
 else:
     page = st.sidebar.radio(
         "Navigation",
