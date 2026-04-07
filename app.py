@@ -8,7 +8,7 @@ from tracking import show_tracking
 from dashboard import show_dashboard
 from product_tracking import show_product_tracking
 from upload import show_upload
-from delete import show_delete
+from delete_data import show_delete
 
 # ==============================
 # 🔐 LOGIN SYSTEM
