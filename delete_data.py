@@ -147,3 +147,7 @@ def show_delete(conn, cur):
 
                 conn.commit()
                 st.rerun()
+                
+            except Exception as e:
+                conn.rollback()
+                st.error(f"Error: {e}")
