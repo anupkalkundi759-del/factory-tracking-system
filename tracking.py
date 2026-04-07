@@ -86,7 +86,7 @@ def show_tracking(conn, cur):
         """, (house_id, product_id))
 
         current_seq = cur.fetchone()[0]
-        st.info(f"Current Progress Stage: {current_seq}")
+        st.info(f"Completed Stage: {current_seq}")
 
         cur.execute("SELECT stage_id, stage_name, sequence FROM stages ORDER BY sequence")
         all_stages = cur.fetchall()
@@ -115,7 +115,7 @@ def show_tracking(conn, cur):
         if selected_sequence > allowed_sequence:
             st.error("❌ Complete previous stage first")
         else:
-            status = st.selectbox("Status", ["Pending", "Started", "Completed"])
+            status = st.selectbox("Status", ["Started", "Completed", "In Progress", "Pending"])
 
             if st.button("Submit"):
                 cur.execute("""
