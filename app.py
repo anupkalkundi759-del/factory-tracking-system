@@ -67,6 +67,12 @@ else:
         "Navigation",
         ["Tracking", "Product Tracking"]
     )
+    
+if st.sidebar.button("Logout"):
+    st.session_state.logged_in = False
+    st.session_state.role = None
+    st.rerun()
+    
 st.title("Factory Tracking System")
 
 # ================= ROUTING =================
