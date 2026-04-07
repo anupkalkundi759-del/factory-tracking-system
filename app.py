@@ -405,19 +405,8 @@ if page == "Product Tracking":
 
     df_display = df.drop(columns=["Stage Seq", "Progress %"])
 
-    # ================= STATUS COLOR =================
-    def color_status(val):
-        if val == "Completed":
-            return "background-color: #28a745; color: white"
-        elif val == "Started":
-            return "background-color: #ffc107"
-        else:
-            return "background-color: #dc3545; color: white"
-
-    st.dataframe(
-        df_display.style.applymap(color_status, subset=["Status"]),
-        use_container_width=True
-    )
+    # ================= FINAL DISPLAY (FIXED) =================
+    st.dataframe(df_display, use_container_width=True)
 
 # =========================================================
 # ================= UPLOAD PAGE ============================
