@@ -23,42 +23,24 @@ def show_upload(conn, cur):
         df = pd.read_excel(uploaded_file)
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-        # ================= COLUMN HANDLING =================
-        # project
-        if "project_name" not in df.columns:
-            st.error("Missing column: project_name")
-            st.stop()
-
-        # unit
-        if "unit_name" not in df.columns:
-            st.error("Missing column: unit_name")
-            st.stop()
-
-        # house (flexible)
-        if "house_no" in df.columns:
-            df["house_name"] = df["house_no"]
-        elif "house_name" in df.columns:
-            df["house_name"] = df["house_name"]
-        else:
-            st.error("Missing column: house_no or house_name")
-            st.stop()
-
-        # product
-        if "product_name" not in df.columns:
-            st.error("Missing column: product_name")
-            st.stop()
-
-        # quantity (optional)
-        if "quantity" in df.columns:
-            df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0).astype(int)
-        else:
-            df["quantity"] = 0
+        # ================= VALIDATION =================
+        required_cols = ["project_name", "unit_name", "house_name", "product_code", "product_category"]
+        for col in required_cols:
+            if col not in df.columns:
+                st.error(f"Missing column: {col}")
+                st.stop()
 
         # ================= CLEAN =================
         df["project_name"] = df["project_name"].astype(str).str.strip()
         df["unit_name"] = df["unit_name"].astype(str).str.strip()
         df["house_name"] = df["house_name"].astype(str).str.strip()
-        df["product_name"] = df["product_name"].astype(str).str.strip()
+        df["product_code"] = df["product_code"].astype(str).str.strip()
+        df["product_category"] = df["product_category"].astype(str).str.strip()
+
+        if "quantity" in df.columns:
+            df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0).astype(int)
+        else:
+            df["quantity"] = 0
 
         df = df.drop_duplicates()
         total_rows = len(df)
@@ -110,25 +92,29 @@ def show_upload(conn, cur):
         cur.execute("SELECT house_id, house_name, unit_id FROM houses")
         house_map = {(h, u): hid for hid, h, u in cur.fetchall()}
 
-        # ================= PRODUCT MASTER =================
-        for p in df["product_name"].dropna().unique():
-            cur.execute("""
-                INSERT INTO products_master (product_name)
-                VALUES (%s)
-                ON CONFLICT (product_name) DO NOTHING
-            """, (p,))
+        # ================= PRODUCT MASTER (WITH CATEGORY) =================
+        for _, row in df.iterrows():
+            try:
+                cur.execute("""
+                    INSERT INTO products_master (product_name, product_category)
+                    VALUES (%s, %s)
+                    ON CONFLICT (product_name)
+                    DO UPDATE SET product_category = EXCLUDED.product_category
+                """, (row["product_code"], row["product_category"]))
+            except:
+                error_count += 1
         conn.commit()
 
         cur.execute("SELECT product_id, product_name FROM products_master")
         product_map = {name: pid for pid, name in cur.fetchall()}
 
-        # ================= HOUSE PRODUCTS (UPSERT QUANTITY) =================
+        # ================= HOUSE PRODUCTS =================
         for _, row in df.iterrows():
             try:
                 project_id = project_map[row["project_name"]]
                 unit_id = unit_map[(row["unit_name"], project_id)]
                 house_id = house_map[(row["house_name"], unit_id)]
-                product_id = product_map[row["product_name"]]
+                product_id = product_map[row["product_code"]]
                 quantity = int(row["quantity"])
 
                 cur.execute("""
@@ -153,5 +139,5 @@ def show_upload(conn, cur):
 📄 Rows: {total_rows}  
 ⚠️ Errors: {error_count}
 
-✅ Insert + Update working properly
+✅ Category + Quantity + Structure all working
 """)
