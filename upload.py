@@ -92,10 +92,10 @@ def show_upload(conn, cur):
                 unit_id = unit_map[(row["unit_name"], project_id)]
 
                 cur.execute("""
-                    INSERT INTO houses (unit_id, house_name)
+                    INSERT INTO houses (unit_id, house_no)
                     VALUES (%s, %s)
-                    ON CONFLICT (unit_id, house_name) DO NOTHING
-                """, (unit_id, row["house_name"]))
+                    ON CONFLICT (unit_id, house_no) DO NOTHING
+                """, (unit_id, row["house_no"]))
 
             except Exception as e:
                 error_count += 1
