@@ -24,10 +24,20 @@ def show_upload(conn, cur):
         df = pd.read_excel(uploaded_file)
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-        df = df.drop_duplicates()
+        # ✅ REQUIRED COLUMNS CHECK (DON'T SKIP THIS)
+        required_cols = ["project_name", "unit_name", "house_name"]
+        for col in required_cols:
+            if col not in df.columns:
+                st.error(f"Missing column: {col}")
+                st.stop()
+
+        # ✅ CLEAN DATA
+        df = df.dropna(subset=required_cols)
+        df = df.drop_duplicates(subset=required_cols)
+
         total_rows = len(df)
 
-        # BEFORE
+        # ================= BEFORE COUNT =================
         cur.execute("SELECT COUNT(*) FROM projects")
         before_projects = cur.fetchone()[0]
 
@@ -40,28 +50,59 @@ def show_upload(conn, cur):
         cur.execute("SELECT COUNT(*) FROM products_master")
         before_products = cur.fetchone()[0]
 
-        # PROJECTS
-        for p in df["project_name"].dropna().unique():
-            cur.execute("INSERT INTO projects (project_name) VALUES (%s) ON CONFLICT DO NOTHING", (p,))
+        # ================= INSERT PROJECTS =================
+        for p in df["project_name"].unique():
+            cur.execute("""
+                INSERT INTO projects (project_name)
+                VALUES (%s)
+                ON CONFLICT (project_name) DO NOTHING
+            """, (p,))
         conn.commit()
 
+        # PROJECT MAP
         cur.execute("SELECT project_id, project_name FROM projects")
         project_map = {name: pid for pid, name in cur.fetchall()}
 
+        # ================= INSERT UNITS =================
         error_count = 0
 
         for _, row in df.iterrows():
             try:
+                project_id = project_map[row["project_name"]]
+
                 cur.execute("""
                     INSERT INTO units (project_id, unit_name)
-                    VALUES (%s, %s) ON CONFLICT DO NOTHING
-                """, (project_map[row["project_name"]], row["unit_name"]))
-            except:
+                    VALUES (%s, %s)
+                    ON CONFLICT (project_id, unit_name) DO NOTHING
+                """, (project_id, row["unit_name"]))
+
+            except Exception as e:
                 error_count += 1
 
         conn.commit()
 
-        # AFTER
+        # UNIT MAP (CRITICAL)
+        cur.execute("SELECT unit_id, unit_name, project_id FROM units")
+        unit_map = {(u, p): uid for uid, u, p in cur.fetchall()}
+
+        # ================= INSERT HOUSES =================
+        for _, row in df.iterrows():
+            try:
+                project_id = project_map[row["project_name"]]
+                unit_id = unit_map[(row["unit_name"], project_id)]
+
+                cur.execute("""
+                    INSERT INTO houses (unit_id, house_name)
+                    VALUES (%s, %s)
+                    ON CONFLICT (unit_id, house_name) DO NOTHING
+                """, (unit_id, row["house_name"]))
+
+            except Exception as e:
+                error_count += 1
+
+        conn.commit()
+
+        # ================= AFTER COUNT =================
         cur.execute("SELECT COUNT(*) FROM projects")
         after_projects = cur.fetchone()[0]
 
@@ -87,7 +128,7 @@ def show_upload(conn, cur):
 🚀 Upload Completed!
 
 ⏱ Time: {total_time}s  
-📄 Rows: {total_rows}  
+📄 Rows Processed: {total_rows}  
 ⚠️ Errors: {error_count}
 
 📊 Added:
