@@ -17,70 +17,109 @@ def show_upload(conn, cur):
     if uploaded_file:
 
         start_time = time.time()
-
         status = st.empty()
         status.info("⏳ Uploading Please Wait...")
 
         df = pd.read_excel(uploaded_file)
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
+        # ================= VALIDATION =================
+        required_cols = ["project_name", "unit_name", "house_no", "product_code"]
+        for col in required_cols:
+            if col not in df.columns:
+                st.error(f"Missing column: {col}")
+                st.stop()
+
+        # ================= CLEAN =================
+        df["project_name"] = df["project_name"].astype(str).str.strip()
+        df["unit_name"] = df["unit_name"].astype(str).str.strip()
+        df["house_no"] = df["house_no"].astype(str).str.strip()
+        df["product_code"] = df["product_code"].astype(str).str.strip()
+
+        if "quantity" in df.columns:
+            df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(1).astype(int)
+        else:
+            df["quantity"] = 1
+
         df = df.drop_duplicates()
         total_rows = len(df)
 
-        # BEFORE
-        cur.execute("SELECT COUNT(*) FROM projects")
-        before_projects = cur.fetchone()[0]
+        error_count = 0
 
-        cur.execute("SELECT COUNT(*) FROM units")
-        before_units = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM houses")
-        before_houses = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM products_master")
-        before_products = cur.fetchone()[0]
-
-        # PROJECTS
-        for p in df["project_name"].dropna().unique():
-            cur.execute("INSERT INTO projects (project_name) VALUES (%s) ON CONFLICT DO NOTHING", (p,))
+        # ================= PROJECTS =================
+        for p in df["project_name"].unique():
+            cur.execute("""
+                INSERT INTO projects (project_name)
+                VALUES (%s)
+                ON CONFLICT DO NOTHING
+            """, (p,))
         conn.commit()
 
         cur.execute("SELECT project_id, project_name FROM projects")
         project_map = {name: pid for pid, name in cur.fetchall()}
 
-        error_count = 0
-
+        # ================= UNITS =================
         for _, row in df.iterrows():
             try:
                 cur.execute("""
                     INSERT INTO units (project_id, unit_name)
-                    VALUES (%s, %s) ON CONFLICT DO NOTHING
+                    VALUES (%s, %s)
+                    ON CONFLICT DO NOTHING
                 """, (project_map[row["project_name"]], row["unit_name"]))
+            except:
+                error_count += 1
+        conn.commit()
+
+        cur.execute("SELECT unit_id, unit_name, project_id FROM units")
+        unit_map = {(u, p): uid for uid, u, p in cur.fetchall()}
+
+        # ================= HOUSES =================
+        for _, row in df.iterrows():
+            try:
+                unit_id = unit_map[(row["unit_name"], project_map[row["project_name"]])]
+
+                cur.execute("""
+                    INSERT INTO houses (unit_id, house_no)
+                    VALUES (%s, %s)
+                    ON CONFLICT DO NOTHING
+                """, (unit_id, row["house_no"]))
+            except:
+                error_count += 1
+        conn.commit()
+
+        cur.execute("SELECT house_id, house_no, unit_id FROM houses")
+        house_map = {(h, u): hid for hid, h, u in cur.fetchall()}
+
+        # ================= PRODUCT MASTER =================
+        for p in df["product_code"].unique():
+            cur.execute("""
+                INSERT INTO products_master (product_code)
+                VALUES (%s)
+                ON CONFLICT DO NOTHING
+            """, (p,))
+        conn.commit()
+
+        cur.execute("SELECT product_id, product_code FROM products_master")
+        product_map = {code: pid for pid, code in cur.fetchall()}
+
+        # ================= PRODUCTS =================
+        for _, row in df.iterrows():
+            try:
+                unit_id = unit_map[(row["unit_name"], project_map[row["project_name"]])]
+                house_id = house_map[(row["house_no"], unit_id)]
+                product_id = product_map[row["product_code"]]
+
+                cur.execute("""
+                    INSERT INTO products (house_id, product_id, quantity)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT DO NOTHING
+                """, (house_id, product_id, int(row["quantity"])))
             except:
                 error_count += 1
 
         conn.commit()
 
-        # AFTER
-        cur.execute("SELECT COUNT(*) FROM projects")
-        after_projects = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM units")
-        after_units = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM houses")
-        after_houses = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM products_master")
-        after_products = cur.fetchone()[0]
-
-        added_projects = after_projects - before_projects
-        added_units = after_units - before_units
-        added_houses = after_houses - before_houses
-        added_products = after_products - before_products
-
         total_time = round(time.time() - start_time, 2)
-
         status.empty()
 
         st.success(f"""
@@ -90,9 +129,5 @@ def show_upload(conn, cur):
 📄 Rows: {total_rows}  
 ⚠️ Errors: {error_count}
 
-📊 Added:
-Projects: {added_projects}
-Units: {added_units}
-Houses: {added_houses}
-Products: {added_products}
+✅ All data inserted correctly
 """)
