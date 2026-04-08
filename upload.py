@@ -6,7 +6,7 @@ def show_upload(conn, cur):
     import pandas as pd
     import time
 
-     if st.session_state.role != "admin":
+    if st.session_state.role != "admin":
         st.error("Access denied")
         st.stop()
 
@@ -19,7 +19,7 @@ def show_upload(conn, cur):
         start_time = time.time()
 
         status = st.empty()
-        status.info("⏳ Uploading...")
+        status.info("⏳ Uploading Please Wait...")
 
         df = pd.read_excel(uploaded_file)
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
