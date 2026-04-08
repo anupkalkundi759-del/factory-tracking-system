@@ -23,16 +23,42 @@ def show_upload(conn, cur):
         df = pd.read_excel(uploaded_file)
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-        # ================= CLEAN =================
-        df["project_name"] = df["project_name"].astype(str).str.strip()
-        df["unit_name"] = df["unit_name"].astype(str).str.strip()
-        df["house_no"] = df["house_no"].astype(str).str.strip()
-        df["product_name"] = df["product_name"].astype(str).str.strip()
+        # ================= COLUMN HANDLING =================
+        # project
+        if "project_name" not in df.columns:
+            st.error("Missing column: project_name")
+            st.stop()
 
+        # unit
+        if "unit_name" not in df.columns:
+            st.error("Missing column: unit_name")
+            st.stop()
+
+        # house (flexible)
+        if "house_no" in df.columns:
+            df["house_name"] = df["house_no"]
+        elif "house_name" in df.columns:
+            df["house_name"] = df["house_name"]
+        else:
+            st.error("Missing column: house_no or house_name")
+            st.stop()
+
+        # product
+        if "product_name" not in df.columns:
+            st.error("Missing column: product_name")
+            st.stop()
+
+        # quantity (optional)
         if "quantity" in df.columns:
             df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0).astype(int)
         else:
             df["quantity"] = 0
+
+        # ================= CLEAN =================
+        df["project_name"] = df["project_name"].astype(str).str.strip()
+        df["unit_name"] = df["unit_name"].astype(str).str.strip()
+        df["house_name"] = df["house_name"].astype(str).str.strip()
+        df["product_name"] = df["product_name"].astype(str).str.strip()
 
         df = df.drop_duplicates()
         total_rows = len(df)
@@ -59,7 +85,7 @@ def show_upload(conn, cur):
                     VALUES (%s, %s)
                     ON CONFLICT (project_id, unit_name) DO NOTHING
                 """, (project_map[row["project_name"]], row["unit_name"]))
-            except Exception:
+            except:
                 error_count += 1
         conn.commit()
 
@@ -76,8 +102,8 @@ def show_upload(conn, cur):
                     INSERT INTO houses (unit_id, house_name)
                     VALUES (%s, %s)
                     ON CONFLICT (unit_id, house_name) DO NOTHING
-                """, (unit_id, row["house_no"]))
-            except Exception:
+                """, (unit_id, row["house_name"]))
+            except:
                 error_count += 1
         conn.commit()
 
@@ -101,7 +127,7 @@ def show_upload(conn, cur):
             try:
                 project_id = project_map[row["project_name"]]
                 unit_id = unit_map[(row["unit_name"], project_id)]
-                house_id = house_map[(row["house_no"], unit_id)]
+                house_id = house_map[(row["house_name"], unit_id)]
                 product_id = product_map[row["product_name"]]
                 quantity = int(row["quantity"])
 
@@ -112,7 +138,7 @@ def show_upload(conn, cur):
                     DO UPDATE SET quantity = EXCLUDED.quantity
                 """, (house_id, product_id, quantity))
 
-            except Exception:
+            except:
                 error_count += 1
 
         conn.commit()
@@ -127,5 +153,5 @@ def show_upload(conn, cur):
 📄 Rows: {total_rows}  
 ⚠️ Errors: {error_count}
 
-✅ Data handled (Insert + Update working)
+✅ Insert + Update working properly
 """)
