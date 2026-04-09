@@ -33,7 +33,7 @@ def show_upload(conn, cur):
         df["house_no"] = df["house_no"].astype(str).str.strip()
         df["product_code"] = df["product_code"].astype(str).str.strip()
 
-        # ================= ORIENTATION FIX =================
+        # ================= ORIENTATION =================
         if "orientation" in df.columns:
             df["orientation"] = df["orientation"].astype(str).str.strip()
             df["orientation"] = df["orientation"].replace("", None)
@@ -107,25 +107,36 @@ def show_upload(conn, cur):
         cur.execute("SELECT product_id, product_code FROM products_master")
         product_map = {code: pid for pid, code in cur.fetchall()}
 
-        # ================= PRODUCTS =================
+        # ================= PRODUCTS (UPDATED LOGIC) =================
         for _, row in df.iterrows():
             try:
                 unit_id = unit_map[(row["unit_name"], project_map[row["project_name"]])]
                 house_id = house_map[(row["house_no"], unit_id)]
                 product_id = product_map[row["product_code"]]
 
-                cur.execute("""
-                    INSERT INTO products (house_id, product_id, quantity, orientation)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT DO NOTHING
-                """, (
-                    house_id,
-                    product_id,
-                    int(row["quantity"]),
-                    row["orientation"]
-                ))
+                qty = int(row["quantity"])
 
-            except:
+                for _ in range(qty):
+                    cur.execute("""
+                        INSERT INTO products (
+                            house_id,
+                            product_id,
+                            orientation,
+                            stage,
+                            status,
+                            stage_start_date
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (
+                        house_id,
+                        product_id,
+                        row["orientation"],
+                        "Not Started",
+                        "Not Started",
+                        None
+                    ))
+
+            except Exception as e:
                 error_count += 1
 
         conn.commit()
@@ -140,5 +151,5 @@ def show_upload(conn, cur):
 📄 Rows: {total_rows}  
 ⚠️ Errors: {error_count}
 
-✅ All data inserted correctly
+✅ Data expanded to unit-level successfully
 """)
