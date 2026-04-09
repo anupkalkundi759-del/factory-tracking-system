@@ -10,7 +10,6 @@ def show_delete(conn, cur):
 
     st.title("🗑 Delete Data")
 
-    # ================= DELETE TYPE =================
     delete_type = st.radio(
         "Select what to delete",
         ["Project", "Unit", "House", "Product"]
@@ -46,7 +45,7 @@ def show_delete(conn, cur):
 
     # ================= HOUSE =================
     if delete_type in ["House", "Product"] and unit_id:
-        cur.execute("SELECT house_id, house_name FROM houses WHERE unit_id=%s", (unit_id,))
+        cur.execute("SELECT house_id, house_no FROM houses WHERE unit_id=%s", (unit_id,))
         houses = cur.fetchall()
 
         if houses:
@@ -59,7 +58,7 @@ def show_delete(conn, cur):
     # ================= PRODUCT =================
     if delete_type == "Product" and house_id:
         cur.execute("""
-            SELECT pm.product_id, pm.product_name
+            SELECT pm.product_id, pm.product_code
             FROM products p
             JOIN products_master pm ON p.product_id = pm.product_id
             WHERE p.house_id = %s
@@ -73,36 +72,22 @@ def show_delete(conn, cur):
         else:
             st.warning("No products found")
 
-    # ================= PREVIEW =================
-    st.markdown("---")
-    st.subheader("⚠ Delete Preview")
-
-    if delete_type == "Project":
-        st.info("This will delete entire project (units, houses, products)")
-    elif delete_type == "Unit":
-        st.info("This will delete unit and all its houses & products")
-    elif delete_type == "House":
-        st.info("This will delete house and its products")
-    elif delete_type == "Product":
-        st.info("This will delete only selected product")
-
     # ================= CONFIRM =================
-    if "confirm_delete" not in st.session_state:
-        st.session_state.confirm_delete = False
+    st.markdown("---")
+    if st.button("Delete"):
+        confirm = st.text_input("Type DELETE to confirm")
 
-    if st.button("Proceed to Delete"):
-        st.session_state.confirm_delete = True
-
-    if st.session_state.confirm_delete:
-
-        confirm_text = st.text_input("Type DELETE to confirm")
-
-        if confirm_text == "DELETE":
+        if confirm == "DELETE":
 
             try:
 
                 # ================= PRODUCT =================
                 if delete_type == "Product" and house_id and product_id:
+                    cur.execute("""
+                        DELETE FROM tracking_log 
+                        WHERE house_id=%s AND product_id=%s
+                    """, (house_id, product_id))
+
                     cur.execute("""
                         DELETE FROM products
                         WHERE house_id=%s AND product_id=%s
@@ -110,17 +95,20 @@ def show_delete(conn, cur):
 
                 # ================= HOUSE =================
                 elif delete_type == "House" and house_id:
+                    cur.execute("DELETE FROM tracking_log WHERE house_id=%s", (house_id,))
                     cur.execute("DELETE FROM products WHERE house_id=%s", (house_id,))
                     cur.execute("DELETE FROM houses WHERE house_id=%s", (house_id,))
 
                 # ================= UNIT =================
                 elif delete_type == "Unit" and unit_id:
-
-                    # 🔴 FIX: delete unit_products first
                     cur.execute("""
-                        DELETE FROM unit_products
-                        WHERE unit_id = %s
+                        DELETE FROM tracking_log 
+                        WHERE house_id IN (
+                            SELECT house_id FROM houses WHERE unit_id=%s
+                        )
                     """, (unit_id,))
+
+                    cur.execute("DELETE FROM unit_products WHERE unit_id=%s", (unit_id,))
 
                     cur.execute("""
                         DELETE FROM products
@@ -134,8 +122,16 @@ def show_delete(conn, cur):
 
                 # ================= PROJECT =================
                 elif delete_type == "Project":
+                    cur.execute("""
+                        DELETE FROM tracking_log 
+                        WHERE house_id IN (
+                            SELECT h.house_id
+                            FROM houses h
+                            JOIN units u ON h.unit_id = u.unit_id
+                            WHERE u.project_id = %s
+                        )
+                    """, (project_id,))
 
-                    # 🔴 FIX: delete unit_products first
                     cur.execute("""
                         DELETE FROM unit_products
                         WHERE unit_id IN (
@@ -165,8 +161,6 @@ def show_delete(conn, cur):
 
                 conn.commit()
                 st.success("Deleted successfully")
-
-                st.session_state.confirm_delete = False
                 st.rerun()
 
             except Exception as e:
