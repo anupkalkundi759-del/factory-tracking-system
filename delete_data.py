@@ -75,103 +75,112 @@ def show_delete(conn, cur):
 
     st.markdown("---")
 
-    if st.button("Delete"):
-        st.session_state.confirm_delete = True
+    # FIRST CLICK
+    if not st.session_state.confirm_delete:
+        if st.button("🗑 Delete"):
+            st.session_state.confirm_delete = True
 
-    if st.session_state.confirm_delete:
+    # CONFIRMATION STEP
+    else:
+        st.warning("⚠ Are you sure you want to delete this?")
 
-        st.warning("Type DELETE to confirm")
+        col1, col2 = st.columns(2)
 
-        confirm = st.text_input("Confirmation")
+        # ================= YES DELETE =================
+        with col1:
+            if st.button("✅ Yes, Delete"):
 
-        if confirm == "DELETE":
+                try:
 
-            try:
+                    # ================= PRODUCT =================
+                    if delete_type == "Product" and house_id and product_id:
+                        cur.execute("""
+                            DELETE FROM tracking_log 
+                            WHERE house_id=%s AND product_id=%s
+                        """, (house_id, product_id))
 
-                # ================= PRODUCT =================
-                if delete_type == "Product" and house_id and product_id:
-                    cur.execute("""
-                        DELETE FROM tracking_log 
-                        WHERE house_id=%s AND product_id=%s
-                    """, (house_id, product_id))
+                        cur.execute("""
+                            DELETE FROM products
+                            WHERE house_id=%s AND product_id=%s
+                        """, (house_id, product_id))
 
-                    cur.execute("""
-                        DELETE FROM products
-                        WHERE house_id=%s AND product_id=%s
-                    """, (house_id, product_id))
+                    # ================= HOUSE =================
+                    elif delete_type == "House" and house_id:
+                        cur.execute("DELETE FROM tracking_log WHERE house_id=%s", (house_id,))
+                        cur.execute("DELETE FROM products WHERE house_id=%s", (house_id,))
+                        cur.execute("DELETE FROM houses WHERE house_id=%s", (house_id,))
 
-                # ================= HOUSE =================
-                elif delete_type == "House" and house_id:
-                    cur.execute("DELETE FROM tracking_log WHERE house_id=%s", (house_id,))
-                    cur.execute("DELETE FROM products WHERE house_id=%s", (house_id,))
-                    cur.execute("DELETE FROM houses WHERE house_id=%s", (house_id,))
+                    # ================= UNIT =================
+                    elif delete_type == "Unit" and unit_id:
+                        cur.execute("""
+                            DELETE FROM tracking_log 
+                            WHERE house_id IN (
+                                SELECT house_id FROM houses WHERE unit_id=%s
+                            )
+                        """, (unit_id,))
 
-                # ================= UNIT =================
-                elif delete_type == "Unit" and unit_id:
-                    cur.execute("""
-                        DELETE FROM tracking_log 
-                        WHERE house_id IN (
-                            SELECT house_id FROM houses WHERE unit_id=%s
-                        )
-                    """, (unit_id,))
+                        cur.execute("DELETE FROM unit_products WHERE unit_id=%s", (unit_id,))
 
-                    cur.execute("DELETE FROM unit_products WHERE unit_id=%s", (unit_id,))
+                        cur.execute("""
+                            DELETE FROM products
+                            WHERE house_id IN (
+                                SELECT house_id FROM houses WHERE unit_id=%s
+                            )
+                        """, (unit_id,))
 
-                    cur.execute("""
-                        DELETE FROM products
-                        WHERE house_id IN (
-                            SELECT house_id FROM houses WHERE unit_id=%s
-                        )
-                    """, (unit_id,))
+                        cur.execute("DELETE FROM houses WHERE unit_id=%s", (unit_id,))
+                        cur.execute("DELETE FROM units WHERE unit_id=%s", (unit_id,))
 
-                    cur.execute("DELETE FROM houses WHERE unit_id=%s", (unit_id,))
-                    cur.execute("DELETE FROM units WHERE unit_id=%s", (unit_id,))
+                    # ================= PROJECT =================
+                    elif delete_type == "Project":
+                        cur.execute("""
+                            DELETE FROM tracking_log 
+                            WHERE house_id IN (
+                                SELECT h.house_id
+                                FROM houses h
+                                JOIN units u ON h.unit_id = u.unit_id
+                                WHERE u.project_id = %s
+                            )
+                        """, (project_id,))
 
-                # ================= PROJECT =================
-                elif delete_type == "Project":
-                    cur.execute("""
-                        DELETE FROM tracking_log 
-                        WHERE house_id IN (
-                            SELECT h.house_id
-                            FROM houses h
-                            JOIN units u ON h.unit_id = u.unit_id
-                            WHERE u.project_id = %s
-                        )
-                    """, (project_id,))
+                        cur.execute("""
+                            DELETE FROM unit_products
+                            WHERE unit_id IN (
+                                SELECT unit_id FROM units WHERE project_id=%s
+                            )
+                        """, (project_id,))
 
-                    cur.execute("""
-                        DELETE FROM unit_products
-                        WHERE unit_id IN (
-                            SELECT unit_id FROM units WHERE project_id=%s
-                        )
-                    """, (project_id,))
+                        cur.execute("""
+                            DELETE FROM products
+                            WHERE house_id IN (
+                                SELECT h.house_id
+                                FROM houses h
+                                JOIN units u ON h.unit_id = u.unit_id
+                                WHERE u.project_id = %s
+                            )
+                        """, (project_id,))
 
-                    cur.execute("""
-                        DELETE FROM products
-                        WHERE house_id IN (
-                            SELECT h.house_id
-                            FROM houses h
-                            JOIN units u ON h.unit_id = u.unit_id
-                            WHERE u.project_id = %s
-                        )
-                    """, (project_id,))
+                        cur.execute("""
+                            DELETE FROM houses
+                            WHERE unit_id IN (
+                                SELECT unit_id FROM units WHERE project_id = %s
+                            )
+                        """, (project_id,))
 
-                    cur.execute("""
-                        DELETE FROM houses
-                        WHERE unit_id IN (
-                            SELECT unit_id FROM units WHERE project_id = %s
-                        )
-                    """, (project_id,))
+                        cur.execute("DELETE FROM units WHERE project_id=%s", (project_id,))
+                        cur.execute("DELETE FROM projects WHERE project_id=%s", (project_id,))
 
-                    cur.execute("DELETE FROM units WHERE project_id=%s", (project_id,))
-                    cur.execute("DELETE FROM projects WHERE project_id=%s", (project_id,))
+                    conn.commit()
+                    st.success("Deleted successfully")
 
-                conn.commit()
-                st.success("Deleted successfully")
+                    st.session_state.confirm_delete = False
+                    st.rerun()
 
+                except Exception as e:
+                    conn.rollback()
+                    st.error(f"Error: {e}")
+
+        # ================= CANCEL =================
+        with col2:
+            if st.button("❌ Cancel"):
                 st.session_state.confirm_delete = False
-                st.rerun()
-
-            except Exception as e:
-                conn.rollback()
-                st.error(f"Error: {e}")
