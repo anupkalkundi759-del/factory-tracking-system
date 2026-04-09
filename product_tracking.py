@@ -63,7 +63,7 @@ def show_product_tracking(conn, cur):
     query = """
     SELECT 
         pm.product_code,
-        COALESCE(pm.type, 'Unknown') AS type,
+        pm.type,
         COALESCE(p.orientation, '-') AS orientation,
         p.quantity,
         pr.project_name,
@@ -131,10 +131,11 @@ def show_product_tracking(conn, cur):
         "Stage", "Status", "Stage Seq", "Last Update"
     ])
 
+    # ================= FIX TYPE (NO UNKNOWN SHOWN) =================
+    df["Type"] = df["Type"].fillna("")
+
     # ================= TIME FIX (UTC → IST) =================
     df["Last Update"] = pd.to_datetime(df["Last Update"], errors="coerce", utc=True)
-
-    # Convert to IST
     df["Last Update"] = df["Last Update"].dt.tz_convert("Asia/Kolkata")
 
     df["Date & Time"] = df["Last Update"].dt.strftime("%Y-%m-%d %H:%M:%S")
