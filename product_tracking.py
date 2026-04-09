@@ -63,7 +63,7 @@ def show_product_tracking(conn, cur):
     query = """
     SELECT 
         TRIM(pm.product_code),
-        COALESCE(TRIM(pm.type), '') AS type,
+        TRIM(pm.type),
         COALESCE(p.orientation, '-') AS orientation,
         p.quantity,
         pr.project_name,
@@ -131,10 +131,10 @@ def show_product_tracking(conn, cur):
         "Stage", "Status", "Stage Seq", "Last Update"
     ])
 
-    # ================= FIX TYPE =================
-    df["Type"] = df["Type"].replace("", "Unknown")
+    # ================= CLEAN TYPE =================
+    df["Type"] = df["Type"].fillna("").replace("None", "")
 
-    # ================= FIX TIMEZONE =================
+    # ================= FIX TIME =================
     df["Last Update"] = pd.to_datetime(df["Last Update"], errors="coerce", utc=True)
     df["Last Update"] = df["Last Update"].dt.tz_convert("Asia/Kolkata")
 
@@ -143,7 +143,6 @@ def show_product_tracking(conn, cur):
     # ================= PROGRESS =================
     df["Progress"] = (df["Stage Seq"] / 7 * 100).astype(int).astype(str) + "%"
 
-    # ================= CLEAN DISPLAY =================
     df_display = df.drop(columns=["Stage Seq", "Last Update"])
 
     st.dataframe(df_display, use_container_width=True)
