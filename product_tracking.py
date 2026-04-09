@@ -62,8 +62,8 @@ def show_product_tracking(conn, cur):
     # ================= QUERY =================
     query = """
     SELECT 
-        pm.product_code,
-        pm.type,
+        TRIM(pm.product_code),
+        COALESCE(TRIM(pm.type), '') AS type,
         COALESCE(p.orientation, '-') AS orientation,
         p.quantity,
         pr.project_name,
@@ -118,7 +118,7 @@ def show_product_tracking(conn, cur):
 
     if search:
         query += " AND pm.product_code ILIKE %s"
-        params.append(f"%{search}%")
+        params.append(f"%{search.strip()}%")
 
     query += " ORDER BY pm.product_code, p.orientation"
 
@@ -131,10 +131,10 @@ def show_product_tracking(conn, cur):
         "Stage", "Status", "Stage Seq", "Last Update"
     ])
 
-    # ================= FIX TYPE (NO UNKNOWN SHOWN) =================
-    df["Type"] = df["Type"].fillna("")
+    # ================= FIX TYPE =================
+    df["Type"] = df["Type"].replace("", "Unknown")
 
-    # ================= TIME FIX (UTC → IST) =================
+    # ================= FIX TIMEZONE =================
     df["Last Update"] = pd.to_datetime(df["Last Update"], errors="coerce", utc=True)
     df["Last Update"] = df["Last Update"].dt.tz_convert("Asia/Kolkata")
 
@@ -143,6 +143,7 @@ def show_product_tracking(conn, cur):
     # ================= PROGRESS =================
     df["Progress"] = (df["Stage Seq"] / 7 * 100).astype(int).astype(str) + "%"
 
+    # ================= CLEAN DISPLAY =================
     df_display = df.drop(columns=["Stage Seq", "Last Update"])
 
     st.dataframe(df_display, use_container_width=True)
