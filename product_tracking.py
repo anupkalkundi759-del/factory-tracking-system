@@ -11,8 +11,7 @@ def show_product_tracking(conn, cur):
     projects = cur.fetchall()
     project_dict = {p[1]: p[0] for p in projects}
 
-    project_options = ["All"] + list(project_dict.keys())
-    selected_project = col1.selectbox("Project", project_options)
+    selected_project = col1.selectbox("Project", ["All"] + list(project_dict.keys()))
 
     # ================= UNIT =================
     if selected_project == "All":
@@ -22,19 +21,16 @@ def show_product_tracking(conn, cur):
             SELECT unit_id, unit_name
             FROM units
             WHERE project_id = %s
-            ORDER BY unit_name
         """, (project_dict[selected_project],))
 
     units = cur.fetchall()
     unit_dict = {u[1]: u[0] for u in units}
-
-    unit_options = ["All"] + list(unit_dict.keys())
-    selected_unit = col2.selectbox("Unit", unit_options)
+    selected_unit = col2.selectbox("Unit", ["All"] + list(unit_dict.keys()))
 
     # ================= HOUSE =================
     if selected_unit == "All":
         if selected_project == "All":
-            cur.execute("SELECT house_id, house_no FROM houses ORDER BY house_no")
+            cur.execute("SELECT house_id, house_no FROM houses")
         else:
             cur.execute("""
                 SELECT h.house_id, h.house_no
@@ -43,28 +39,20 @@ def show_product_tracking(conn, cur):
                 WHERE u.project_id = %s
             """, (project_dict[selected_project],))
     else:
-        cur.execute("""
-            SELECT house_id, house_no
-            FROM houses
-            WHERE unit_id = %s
-        """, (unit_dict[selected_unit],))
+        cur.execute("SELECT house_id, house_no FROM houses WHERE unit_id = %s",
+                    (unit_dict[selected_unit],))
 
     houses = cur.fetchall()
     house_dict = {h[1]: h[0] for h in houses}
-
-    house_options = ["All"] + list(house_dict.keys())
-    selected_house = col3.selectbox("House", house_options)
+    selected_house = col3.selectbox("House", ["All"] + list(house_dict.keys()))
 
     # ================= STATUS =================
-    status_options = ["All", "Not Started", "Started", "Completed"]
-    selected_status = col4.selectbox("Status", status_options)
+    selected_status = col4.selectbox("Status", ["All", "Not Started", "Started", "Completed"])
 
     # ================= STAGE =================
     cur.execute("SELECT stage_name FROM stages ORDER BY sequence")
-    stages = cur.fetchall()
-    stage_options = ["All"] + [s[0] for s in stages]
-
-    selected_stage = col5.selectbox("Stage", stage_options)
+    stages = [s[0] for s in cur.fetchall()]
+    selected_stage = col5.selectbox("Stage", ["All"] + stages)
 
     # ================= SEARCH =================
     search = col6.text_input("Search")
@@ -101,7 +89,6 @@ def show_product_tracking(conn, cur):
     ) t ON TRUE
 
     LEFT JOIN stages s ON t.stage_id = s.stage_id
-
     WHERE 1=1
     """
 
@@ -142,16 +129,13 @@ def show_product_tracking(conn, cur):
         "Stage", "Status", "Stage Seq", "Last Update"
     ])
 
-    # ================= DATE FORMAT =================
+    # ================= DATE + TIME COMBINED =================
     df["Last Update"] = pd.to_datetime(df["Last Update"], errors="coerce")
-    df["Date"] = df["Last Update"].dt.date
-    df["Time"] = df["Last Update"].dt.strftime("%H:%M:%S")
+    df["Date & Time"] = df["Last Update"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
     # ================= PROGRESS =================
-    total_stages = 7
-    df["Progress %"] = (df["Stage Seq"] / total_stages) * 100
-    df["Progress"] = df["Progress %"].astype(int).astype(str) + "%"
+    df["Progress"] = (df["Stage Seq"] / 7 * 100).astype(int).astype(str) + "%"
 
-    df_display = df.drop(columns=["Stage Seq", "Progress %", "Last Update"])
+    df_display = df.drop(columns=["Stage Seq", "Last Update"])
 
     st.dataframe(df_display, use_container_width=True)
