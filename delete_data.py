@@ -1,6 +1,3 @@
-# =========================================================
-# ================= DELETE DATA PAGE =======================
-# =========================================================
 def show_delete(conn, cur):
     import streamlit as st
 
@@ -72,10 +69,20 @@ def show_delete(conn, cur):
         else:
             st.warning("No products found")
 
-    # ================= CONFIRM =================
+    # ================= CONFIRM STATE =================
+    if "confirm_delete" not in st.session_state:
+        st.session_state.confirm_delete = False
+
     st.markdown("---")
+
     if st.button("Delete"):
-        confirm = st.text_input("Type DELETE to confirm")
+        st.session_state.confirm_delete = True
+
+    if st.session_state.confirm_delete:
+
+        st.warning("Type DELETE to confirm")
+
+        confirm = st.text_input("Confirmation")
 
         if confirm == "DELETE":
 
@@ -161,6 +168,8 @@ def show_delete(conn, cur):
 
                 conn.commit()
                 st.success("Deleted successfully")
+
+                st.session_state.confirm_delete = False
                 st.rerun()
 
             except Exception as e:
