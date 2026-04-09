@@ -39,8 +39,10 @@ def show_product_tracking(conn, cur):
                 WHERE u.project_id = %s
             """, (project_dict[selected_project],))
     else:
-        cur.execute("SELECT house_id, house_no FROM houses WHERE unit_id = %s",
-                    (unit_dict[selected_unit],))
+        cur.execute(
+            "SELECT house_id, house_no FROM houses WHERE unit_id = %s",
+            (unit_dict[selected_unit],)
+        )
 
     houses = cur.fetchall()
     house_dict = {h[1]: h[0] for h in houses}
@@ -61,7 +63,7 @@ def show_product_tracking(conn, cur):
     query = """
     SELECT 
         pm.product_code,
-        pm.type,
+        COALESCE(pm.type, 'Unknown') AS type,
         COALESCE(p.orientation, '-') AS orientation,
         p.quantity,
         pr.project_name,
@@ -129,8 +131,12 @@ def show_product_tracking(conn, cur):
         "Stage", "Status", "Stage Seq", "Last Update"
     ])
 
-    # ================= DATE + TIME COMBINED =================
-    df["Last Update"] = pd.to_datetime(df["Last Update"], errors="coerce")
+    # ================= TIME FIX (UTC → IST) =================
+    df["Last Update"] = pd.to_datetime(df["Last Update"], errors="coerce", utc=True)
+
+    # Convert to IST
+    df["Last Update"] = df["Last Update"].dt.tz_convert("Asia/Kolkata")
+
     df["Date & Time"] = df["Last Update"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
     # ================= PROGRESS =================
