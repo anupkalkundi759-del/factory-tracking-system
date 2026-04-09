@@ -1,6 +1,3 @@
-# =========================================================
-# ================= UPLOAD PAGE ============================
-# =========================================================
 def show_upload(conn, cur):
     import streamlit as st
     import pandas as pd
@@ -36,6 +33,15 @@ def show_upload(conn, cur):
         df["house_no"] = df["house_no"].astype(str).str.strip()
         df["product_code"] = df["product_code"].astype(str).str.strip()
 
+        # ================= ORIENTATION FIX =================
+        if "orientation" in df.columns:
+            df["orientation"] = df["orientation"].astype(str).str.strip()
+            df["orientation"] = df["orientation"].replace("", None)
+            df["orientation"] = df["orientation"].replace("nan", None)
+        else:
+            df["orientation"] = None
+
+        # ================= QUANTITY =================
         if "quantity" in df.columns:
             df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(1).astype(int)
         else:
@@ -43,10 +49,9 @@ def show_upload(conn, cur):
 
         df = df.drop_duplicates()
         total_rows = len(df)
-
         error_count = 0
 
-        # ================= PROJECTS =================
+        # ================= PROJECT =================
         for p in df["project_name"].unique():
             cur.execute("""
                 INSERT INTO projects (project_name)
@@ -58,7 +63,7 @@ def show_upload(conn, cur):
         cur.execute("SELECT project_id, project_name FROM projects")
         project_map = {name: pid for pid, name in cur.fetchall()}
 
-        # ================= UNITS =================
+        # ================= UNIT =================
         for _, row in df.iterrows():
             try:
                 cur.execute("""
@@ -73,7 +78,7 @@ def show_upload(conn, cur):
         cur.execute("SELECT unit_id, unit_name, project_id FROM units")
         unit_map = {(u, p): uid for uid, u, p in cur.fetchall()}
 
-        # ================= HOUSES =================
+        # ================= HOUSE =================
         for _, row in df.iterrows():
             try:
                 unit_id = unit_map[(row["unit_name"], project_map[row["project_name"]])]
@@ -110,10 +115,16 @@ def show_upload(conn, cur):
                 product_id = product_map[row["product_code"]]
 
                 cur.execute("""
-                    INSERT INTO products (house_id, product_id, quantity)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO products (house_id, product_id, quantity, orientation)
+                    VALUES (%s, %s, %s, %s)
                     ON CONFLICT DO NOTHING
-                """, (house_id, product_id, int(row["quantity"])))
+                """, (
+                    house_id,
+                    product_id,
+                    int(row["quantity"]),
+                    row["orientation"]
+                ))
+
             except:
                 error_count += 1
 
